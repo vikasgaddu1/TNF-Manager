@@ -1,244 +1,190 @@
-# Function to Create Tables If They Don't Exist
 createTables <- function(pool) {
-  # Ensure the table exists and populate it if necessary
-  if (!dbExistsTable(pool, "titcat")) {
-    dbExecute(pool, "
-    CREATE TABLE titcat (
-    ID INTEGER PRIMARY KEY AUTOINCREMENT,
-    Category TEXT NOT NULL,
-    Subcategory TEXT,
-    tfltype TEXT NOT NULL,
-    tflnum TEXT NOT NULL,
-    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    )
-  ")
-    
-    # Insert initial data
-    dbExecute(pool, "
-    INSERT INTO titcat (Category, Subcategory, tfltype, tflnum) VALUES
-    ('DISPOSITION', '', 'Listing', '16.2.1.1.x'),
-    ('DISPOSITION', '', 'Table', '15.2.1.1.x'),
-    ('DISPOSITION', '', 'Figure', '14.2.1.1.x'),
-  ")
-  }
+  # Categories table
+  dbExecute(
+    pool,
+    "CREATE TABLE IF NOT EXISTS categories (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      category_name TEXT UNIQUE NOT NULL,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );"
+  )
   
-  # Ensure the titles table exists
-  if (!dbExistsTable(pool, "titles")) {
-    dbExecute(pool, "
-    CREATE TABLE titles (
-      ID INTEGER PRIMARY KEY AUTOINCREMENT,
-      titcat_id INTEGER NOT NULL,
-      Text TEXT UNIQUE NOT NULL,
-      tlfnum_user_input TEXT NOT NULL,
+  # Sub_Categories table
+  dbExecute(
+    pool,
+    "CREATE TABLE IF NOT EXISTS sub_categories (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      category_id INTEGER NOT NULL,
+      sub_category_name TEXT UNIQUE NOT NULL,
+      suggested_ich_number TEXT NOT NULL,
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      FOREIGN KEY(titcat_id) REFERENCES titcat(ID)
-    )
-  ")
-  }
+      FOREIGN KEY (category_id) REFERENCES categories (id) ON DELETE CASCADE,
+      UNIQUE (category_id, sub_category_name)
+    );"
+  )
   
-  # Populations table
-  if (!dbExistsTable(pool, "populations")) {
-    dbExecute(
-      pool,
-      "CREATE TABLE populations (
-        ID INTEGER PRIMARY KEY AUTOINCREMENT, 
-        Text TEXT UNIQUE NOT NULL,
-        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-      )"
-    )
-  }
+  # Titles table
+  dbExecute(
+    pool,
+    "CREATE TABLE IF NOT EXISTS titles (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      title_text TEXT UNIQUE NOT NULL,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );"
+  )
   
   # Footnotes table
-  if (!dbExistsTable(pool, "footnotes")) {
-    dbExecute(
-      pool,
-      "CREATE TABLE footnotes (
-        ID INTEGER PRIMARY KEY AUTOINCREMENT, 
-        Text TEXT UNIQUE NOT NULL,
-        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-      )"
-    )
-  }
+  dbExecute(
+    pool,
+    "CREATE TABLE IF NOT EXISTS footnotes (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      footnote_text TEXT UNIQUE NOT NULL,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );"
+  )
+  
+  # Populations table
+  dbExecute(
+    pool,
+    "CREATE TABLE IF NOT EXISTS populations (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      population_text TEXT UNIQUE NOT NULL,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );"
+  )
   
   # Reports table
-  if (!dbExistsTable(pool, "reports")) {
+  dbExecute(
+    pool,
+    "CREATE TABLE IF NOT EXISTS reports (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      report_key TEXT UNIQUE NOT NULL,
+      title_key TEXT NOT NULL,
+      report_type TEXT NOT NULL,
+      report_category_id INTEGER NOT NULL,
+      report_sub_category_id INTEGER NOT NULL,
+      report_ich_number TEXT NOT NULL,
+      population_id INTEGER NOT NULL,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (population_id) REFERENCES populations (id) ON DELETE CASCADE,
+      FOREIGN KEY (report_category_id) REFERENCES categories (id) ON DELETE CASCADE,
+      FOREIGN KEY (report_sub_category_id) REFERENCES sub_categories (id) ON DELETE CASCADE,
+      UNIQUE (report_key, report_type, report_category_id, report_sub_category_id, report_ich_number, population_id)
+    );"
+  )
+  
+  # Report_Titles association table
+  dbExecute(
+    pool,
+    "CREATE TABLE IF NOT EXISTS report_titles (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      report_id INTEGER NOT NULL,
+      title_id INTEGER NOT NULL,
+      sequence INTEGER NOT NULL,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (report_id) REFERENCES reports (id) ON DELETE CASCADE,
+      FOREIGN KEY (title_id) REFERENCES titles (id) ON DELETE CASCADE,
+      UNIQUE (report_id, title_id)
+    );"
+  )
+  
+  # Report_Footnotes association table
+  dbExecute(
+    pool,
+    "CREATE TABLE IF NOT EXISTS report_footnotes (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      report_id INTEGER NOT NULL,
+      footnote_id INTEGER NOT NULL,
+      sequence INTEGER NOT NULL,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (report_id) REFERENCES reports (id) ON DELETE CASCADE,
+      FOREIGN KEY (footnote_id) REFERENCES footnotes (id) ON DELETE CASCADE,
+      UNIQUE (report_id, footnote_id)
+    );"
+  )
+  
+  # Reporting_Efforts table
+  dbExecute(
+    pool,
+    "CREATE TABLE IF NOT EXISTS reporting_efforts (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      study TEXT NOT NULL,
+      database_release TEXT NOT NULL,
+      reporting_effort TEXT NOT NULL,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );"
+  )
+  
+  dbExecute(
+    pool,
+    "CREATE TABLE IF NOT EXISTS reporting_effort_reports (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      reporting_effort_id INTEGER NOT NULL,
+      report_id INTEGER NOT NULL,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (reporting_effort_id) REFERENCES reporting_efforts (id) ON DELETE CASCADE,
+      FOREIGN KEY (report_id) REFERENCES reports (id) ON DELETE CASCADE,
+      UNIQUE (reporting_effort_id, report_id)
+  );"
+  )
+  
+  # Users table
+  dbExecute(
+    pool,
+    "CREATE TABLE IF NOT EXISTS users (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      username TEXT NOT NULL UNIQUE,
+      role TEXT CHECK (role IN ('admin', 'user', 'production_programmer', 'qc_programmer')),
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );"
+  )
+  
+  # Report_Programming_Tracker table
+  dbExecute(
+    pool,
+    "CREATE TABLE IF NOT EXISTS report_programming_tracker (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      reporting_effort_id INTEGER NOT NULL,
+      report_id INTEGER NOT NULL,
+      production_programmer_id INTEGER,
+      assign_date DATE ,
+      qc_programmer_id INTEGER ,
+      due_date DATE ,
+      status TEXT CHECK (status IN ('Not Started', 'Production Started', 'Production Ready', 'Under QC', 'QC Failed', 'QC Pass')),
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (reporting_effort_id) REFERENCES reporting_efforts (id) ON DELETE CASCADE,
+      FOREIGN KEY (report_id) REFERENCES reports (id) ON DELETE CASCADE,
+      FOREIGN KEY (production_programmer_id) REFERENCES users (id),
+      FOREIGN KEY (qc_programmer_id) REFERENCES users (id),
+      UNIQUE (reporting_effort_id, report_id)
+    );"
+  )
+  
+  # Create indexes
+  dbExecute(pool, "CREATE INDEX IF NOT EXISTS idx_report_category_id ON reports (report_category_id);")
+  dbExecute(pool, "CREATE INDEX IF NOT EXISTS idx_report_sub_category_id ON reports (report_sub_category_id);")
+  dbExecute(pool, "CREATE INDEX IF NOT EXISTS idx_reports_population_id ON reports (population_id);")
+  dbExecute(pool, "CREATE INDEX IF NOT EXISTS idx_report_programming_tracker_report_id ON report_programming_tracker (report_id);")
+  
+  # Create triggers for updated_at
+  tables <- dbListTables(pool)
+  #drop sqlite_sequence from tables
+  tables <- tables[tables != "sqlite_sequence"]
+  
+  for (table in tables) {
     dbExecute(
       pool,
-      "CREATE TABLE reports (
-        ID INTEGER PRIMARY KEY AUTOINCREMENT,
-        titlekey TEXT UNIQUE NOT NULL,
-        tfl_type TEXT NOT NULL,
-        tfl_number TEXT NOT NULL,
-        population_id INTEGER NOT NULL,
-        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (population_id) REFERENCES populations(ID)
-      )"
+      sprintf(
+        "CREATE TRIGGER IF NOT EXISTS update_%s_updated_at 
+         AFTER UPDATE ON %s
+         FOR EACH ROW
+         BEGIN
+           UPDATE %s 
+           SET updated_at = DATETIME('now', 'localtime')
+           WHERE id = NEW.id;
+         END;",
+        table, table, table
+      )
     )
-  }
-  
-  # Reports_Titles association table
-  if (!dbExistsTable(pool, "reports_titles")) {
-    dbExecute(
-      pool,
-      "CREATE TABLE reports_titles (
-        report_id INTEGER NOT NULL,
-        title_id INTEGER NOT NULL,
-        sequence INTEGER NOT NULL,
-        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (report_id) REFERENCES reports(ID),
-        FOREIGN KEY (title_id) REFERENCES titles(ID),
-        PRIMARY KEY (report_id, title_id)
-      )"
-    )
-  }
-  
-  # Reports_Footnotes association table
-  if (!dbExistsTable(pool, "reports_footnotes")) {
-    dbExecute(
-      pool,
-      "CREATE TABLE reports_footnotes (
-        report_id INTEGER NOT NULL,
-        footnote_id INTEGER NOT NULL,
-        sequence INTEGER NOT NULL,
-        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (report_id) REFERENCES reports(ID),
-        FOREIGN KEY (footnote_id) REFERENCES footnotes(ID),
-        PRIMARY KEY (report_id, footnote_id)
-      )"
-    )
-  }
-  
-  # Reporting Efforts table
-  if (!dbExistsTable(pool, "reporting_efforts")) {
-    dbExecute(
-      pool,
-      "CREATE TABLE reporting_efforts (
-        ID INTEGER PRIMARY KEY AUTOINCREMENT,
-        Study TEXT NOT NULL,
-        DatabaseRelease TEXT NOT NULL,
-        ReportingEffort TEXT NOT NULL,
-        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-      )"
-    )
-  }
-  
-  # Association table between reporting efforts and reports
-  if (!dbExistsTable(pool, "reporting_efforts_reports")) {
-    dbExecute(
-      pool,
-      "CREATE TABLE reporting_efforts_reports (
-        ReportingEffortID INTEGER NOT NULL,
-        ReportID INTEGER NOT NULL,
-        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        PRIMARY KEY (ReportingEffortID, ReportID),
-        FOREIGN KEY (ReportingEffortID) REFERENCES reporting_efforts(ID),
-        FOREIGN KEY (ReportID) REFERENCES reports(ID)
-      )"
-    )
-  }
-  
-  # Refresh the triggers list
-  triggers <- dbGetQuery(pool, "SELECT name FROM sqlite_master WHERE type = 'trigger'")
-  
-  # Create triggers for tables without updated_at triggers
-  
-  # Titles Categories trigger
-  if (!"update_titcat_updated_at" %in% triggers$name) {
-    dbExecute(
-      pool, "CREATE TRIGGER update_titcat_updated_at
-      AFTER UPDATE ON titcat
-      FOR EACH ROW
-      BEGIN
-        UPDATE titcat SET updated_at = CURRENT_TIMESTAMP WHERE ID = NEW.ID;
-      END;")
-  }
-  
-  
-  # Titles trigger
-  if (!"update_titles_updated_at" %in% triggers$name) {
-    dbExecute(
-      pool, "CREATE TRIGGER update_titles_updated_at
-      AFTER UPDATE ON titles
-      FOR EACH ROW
-      BEGIN
-        UPDATE titles SET updated_at = CURRENT_TIMESTAMP WHERE ID = NEW.ID;
-      END;")
-  }
-  
-  # Populations trigger
-  if (!"update_populations_updated_at" %in% triggers$name) {
-    dbExecute(
-      pool, "CREATE TRIGGER update_populations_updated_at
-      AFTER UPDATE ON populations
-      FOR EACH ROW
-      BEGIN
-        UPDATE populations SET updated_at = CURRENT_TIMESTAMP WHERE ID = NEW.ID;
-      END;")
-  }
-  
-  # Footnotes trigger
-  if (!"update_footnotes_updated_at" %in% triggers$name) {
-    dbExecute(
-      pool, "CREATE TRIGGER update_footnotes_updated_at
-      AFTER UPDATE ON footnotes
-      FOR EACH ROW
-      BEGIN
-        UPDATE footnotes SET updated_at = CURRENT_TIMESTAMP WHERE ID = NEW.ID;
-      END;")
-  }
-  
-  # Reports trigger
-  if (!"update_reports_updated_at" %in% triggers$name) {
-    dbExecute(
-      pool, "CREATE TRIGGER update_reports_updated_at
-      AFTER UPDATE ON reports
-      FOR EACH ROW
-      BEGIN
-        UPDATE reports SET updated_at = CURRENT_TIMESTAMP WHERE ID = NEW.ID;
-      END;")
-  }
-  
-  # Reports_Titles trigger
-  if (!"update_reports_titles_updated_at" %in% triggers$name) {
-    dbExecute(
-      pool, "CREATE TRIGGER update_reports_titles_updated_at
-      AFTER UPDATE ON reports_titles
-      FOR EACH ROW
-      BEGIN
-        UPDATE reports_titles SET updated_at = CURRENT_TIMESTAMP WHERE report_id = NEW.report_id AND title_id = NEW.title_id;
-      END;")
-  }
-  
-  # Reports_Footnotes trigger
-  if (!"update_reports_footnotes_updated_at" %in% triggers$name) {
-    dbExecute(
-      pool, "CREATE TRIGGER update_reports_footnotes_updated_at
-      AFTER UPDATE ON reports_footnotes
-      FOR EACH ROW
-      BEGIN
-        UPDATE reports_footnotes SET updated_at = CURRENT_TIMESTAMP WHERE report_id = NEW.report_id AND footnote_id = NEW.footnote_id;
-      END;")
-  }
-  
-  # Reporting Efforts trigger
-  if (!"update_reporting_efforts_updated_at" %in% triggers$name) {
-    dbExecute(
-      pool, "CREATE TRIGGER update_reporting_efforts_updated_at
-      AFTER UPDATE ON reporting_efforts
-      FOR EACH ROW
-      BEGIN
-        UPDATE reporting_efforts SET updated_at = CURRENT_TIMESTAMP WHERE ID = NEW.ID;
-      END;")
-  }
-  
-  # Reporting Efforts Reports trigger
-  if (!"update_reporting_efforts_reports_updated_at" %in% triggers$name) {
-    dbExecute(
-      pool, "CREATE TRIGGER update_reporting_efforts_reports_updated_at
-      AFTER UPDATE ON reporting_efforts_reports
-      FOR EACH ROW
-      BEGIN
-        UPDATE reporting_efforts_reports SET updated_at = CURRENT_TIMESTAMP WHERE ReportingEffortID = NEW.ReportingEffortID AND ReportID = NEW.ReportID;
-      END;")
   }
 }
