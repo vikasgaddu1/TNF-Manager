@@ -39,6 +39,58 @@ reportingEffortReportsServer <- function(id, pool, tabs_input) {
       }
     })
     
+    observeEvent(refresh_trigger(), {
+      tryCatch({
+        # Step 1: Insert Missing Records
+        dbExecute(pool, "
+      INSERT INTO report_programming_tracker (
+          reporting_effort_id, 
+          report_id, 
+          production_programmer_id, 
+          qc_programmer_id, 
+          assign_date, 
+          due_date, 
+          priority, 
+          status
+      )
+      SELECT 
+          rer.reporting_effort_id,
+          rer.report_id,
+          NULL,  -- Default value for production_programmer_id
+          NULL,  -- Default value for qc_programmer_id
+          NULL,  -- Default assign_date
+          NULL,  -- Default due_date
+          1,     -- Default priority (lowest)
+          'Not Started'  -- Default status
+      FROM 
+          reporting_effort_reports rer
+      LEFT JOIN 
+          report_programming_tracker rpt
+      ON 
+          rer.reporting_effort_id = rpt.reporting_effort_id
+          AND rer.report_id = rpt.report_id
+      WHERE 
+          rpt.report_id IS NULL;
+    ")
+        
+        # Step 2: Delete Orphaned Records
+        dbExecute(pool, "
+      DELETE FROM report_programming_tracker
+WHERE NOT EXISTS (
+    SELECT 1
+    FROM reporting_effort_reports
+    WHERE reporting_effort_reports.reporting_effort_id = report_programming_tracker.reporting_effort_id
+      AND reporting_effort_reports.report_id = report_programming_tracker.report_id
+);
+    ")
+        
+        showNotification("Tracker data synced successfully.", type = "message")
+        
+      }, error = function(e) {
+        showNotification(paste("Error ensuring tracker data consistency:", e$message), type = "error")
+      })
+    })
+    
     # Reactive: Load and Sort Reports
     reports <- reactive({
       req(input$reporting_effort)
@@ -131,10 +183,10 @@ reportingEffortReportsServer <- function(id, pool, tabs_input) {
           "DELETE FROM reporting_effort_reports WHERE reporting_effort_id = ",
           input$reporting_effort, ";"
         ))
-        dbExecute(pool, paste(
-          "DELETE FROM report_programming_tracker WHERE reporting_effort_id = ",
-          input$reporting_effort, ";"
-        ))        
+        # dbExecute(pool, paste(
+        #   "DELETE FROM report_programming_tracker WHERE reporting_effort_id = ",
+        #   input$reporting_effort, ";"
+        # ))        
         
         # Insert new associations for selected rows
         selected_reports <- edited_data %>%
@@ -146,11 +198,11 @@ reportingEffortReportsServer <- function(id, pool, tabs_input) {
             paste(sprintf("(%s, %s)", input$reporting_effort, selected_reports$id), collapse = ",")
           )
           dbExecute(pool, query)
-          query <- paste(
-            "INSERT INTO report_programming_tracker (reporting_effort_id, report_id) VALUES ",
-            paste(sprintf("(%s, %s)", input$reporting_effort, selected_reports$id), collapse = ",")
-          )
-          dbExecute(pool, query)
+          # query <- paste(
+          #   "INSERT INTO report_programming_tracker (reporting_effort_id, report_id) VALUES ",
+          #   paste(sprintf("(%s, %s)", input$reporting_effort, selected_reports$id), collapse = ",")
+          # )
+          # dbExecute(pool, query)
           
         }
         
@@ -158,7 +210,7 @@ reportingEffortReportsServer <- function(id, pool, tabs_input) {
         # after_save <- dbGetQuery(pool, "SELECT * FROM reporting_effort_reports;")
         # cat("After Save:\n")
         # print(after_save)
-        
+        refresh_trigger(refresh_trigger() + 1)
         showNotification("Selection saved successfully.", type = "message")
       }, error = function(e) {
         showNotification(paste("Error during save operation:", e$message), type = "error")

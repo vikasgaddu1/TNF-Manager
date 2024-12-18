@@ -143,21 +143,23 @@ createTables <- function(pool) {
   dbExecute(
     pool,
     "CREATE TABLE IF NOT EXISTS report_programming_tracker (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      id INTEGER PRIMARY KEY,
       reporting_effort_id INTEGER NOT NULL,
       report_id INTEGER NOT NULL,
+      priority INTEGER,
       production_programmer_id INTEGER,
-      assign_date DATE ,
-      qc_programmer_id INTEGER ,
-      due_date DATE ,
-      status TEXT CHECK (status IN ('Not Started', 'Production Started', 'Production Ready', 'Under QC', 'QC Failed', 'QC Pass')),
+      assign_date DATE,
+      qc_programmer_id INTEGER,
+      due_date DATE,
+      status TEXT,
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (reporting_effort_id) REFERENCES reporting_efforts (id) ON DELETE CASCADE,
       FOREIGN KEY (report_id) REFERENCES reports (id) ON DELETE CASCADE,
       FOREIGN KEY (production_programmer_id) REFERENCES users (id),
       FOREIGN KEY (qc_programmer_id) REFERENCES users (id),
       UNIQUE (reporting_effort_id, report_id)
-    );"
+    );
+"
   )
   
   # Create indexes
