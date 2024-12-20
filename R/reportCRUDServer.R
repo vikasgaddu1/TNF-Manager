@@ -187,13 +187,14 @@ reportCRUDServer <- function(id, pool, tabs_input) {
         title = div(icon("plus-circle"), "Add Report"),
         div(
           class = "form-group",
-          uiOutput(ns("category_dropdown")),
-          uiOutput(ns("sub_category_dropdown")),
           selectizeInput(
             ns("report_type"),
             "Select Report Type",
-            choices = c("Table", "Listing", "Figure")
+            choices = c("Table", "Listing", "Figure", "SDTM", "ADaM")
           ),
+          uiOutput(ns("category_dropdown")),
+          uiOutput(ns("sub_category_dropdown")),
+          
           textInput(
             ns("report_key"),
             "Report Key",

@@ -58,18 +58,18 @@ createTables <- function(pool) {
     pool,
     "CREATE TABLE IF NOT EXISTS reports (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
+      report_type TEXT NOT NULL,
       report_key TEXT UNIQUE NOT NULL,
       title_key TEXT NOT NULL,
-      report_type TEXT NOT NULL,
-      report_category_id INTEGER NOT NULL,
-      report_sub_category_id INTEGER NOT NULL,
-      report_ich_number TEXT NOT NULL,
-      population_id INTEGER NOT NULL,
+      report_category_id INTEGER ,
+      report_sub_category_id INTEGER ,
+      report_ich_number TEXT ,
+      population_id INTEGER ,
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (population_id) REFERENCES populations (id) ON DELETE CASCADE,
       FOREIGN KEY (report_category_id) REFERENCES categories (id) ON DELETE CASCADE,
       FOREIGN KEY (report_sub_category_id) REFERENCES sub_categories (id) ON DELETE CASCADE,
-      UNIQUE (report_key, report_type, report_category_id, report_sub_category_id, report_ich_number, population_id)
+      UNIQUE (report_key, report_type)
     );"
   )
   

@@ -23,7 +23,11 @@ load_libraries(
     "RSQLite",
     "pool",
     "DBI",
-    "rhandsontable"
+    "rhandsontable",
+    "openxlsx",
+    "plotly",
+    "gtsummary",
+    "gt"
   )
 )
 
@@ -38,19 +42,11 @@ createTables(dbPoolCon)
 
 
 ui <- dashboardPage(
-  dashboardHeader(title = "TNF Dashboard"),
+  dashboardHeader(disable = TRUE),
   dashboardSidebar(
     sidebarMenu(
       id = "tabs",
-      menuItem("Categories", tabName = "categories", icon = icon("list")),
-      menuItem(
-        "Sub Categories",
-        tabName = "sub_categories",
-        icon = icon("list-alt")
-      ),
-      menuItem("Titles", tabName = "titles", icon = icon("heading")),
-      menuItem("Footnotes", tabName = "footnotes", icon = icon("asterisk")),
-      menuItem("Populations", tabName = "populations", icon = icon("users")),
+      menuItem("CRUD Menu", tabName = "crud_menu", icon = icon("th"), badgeLabel = "Admin", badgeColor = "red"),
       menuItem("Reports", tabName = "reports", icon = icon("book")),
       menuItem(
         "Reporting Effort",
@@ -62,7 +58,6 @@ ui <- dashboardPage(
         tabName = "re_reports",
         icon = icon("code")
       ),
-      menuItem("Users", tabName = "users", icon = icon("user")),
       menuItem(
         "Programming Tracker",
         tabName = "tracker",
@@ -73,20 +68,26 @@ ui <- dashboardPage(
   ),
   dashboardBody(
     tabItems(
-      tabItem("categories", genericCRUDUI("categories", "Categories")),
       tabItem(
-        "sub_categories",
-        genericCRUDUI("sub_categories", "Sub-Categories")
+        tabName = "crud_menu",
+        fluidRow(
+          tabBox(
+            id = "crud_tabs",
+            width = 12,
+            tabPanel("Categories", genericCRUDUI("categories", "Categories")),
+            tabPanel("Sub Categories", genericCRUDUI("sub_categories", "Sub-Categories")),
+            tabPanel("Titles", genericCRUDUI("titles", "Titles")),
+            tabPanel("Footnotes", genericCRUDUI("footnotes", "Footnotes")),
+            tabPanel("Populations", genericCRUDUI("populations", "Populations")),
+            tabPanel("users", genericCRUDUI("users", "Users")),
+          )
+        )
       ),
-      tabItem("titles", genericCRUDUI("titles", "Titles")),
-      tabItem("footnotes", genericCRUDUI("footnotes", "Footnotes")),
-      tabItem("populations", genericCRUDUI("populations", "Populations")),
       tabItem("reports", genericCRUDUI("reports", "Reports")),
       tabItem(
         "reporting_effort",
         genericCRUDUI("reporting_effort", "Reporting Effort")
       ),
-      tabItem("users", genericCRUDUI("users", "Users")),
       tabItem(
         "re_reports",
         reportingEffortReportsUI("re_reports", "Reporting Effort Reports")
@@ -99,7 +100,7 @@ ui <- dashboardPage(
 )
 
 server <- function(input, output, session) {
-  #categoriesCRUDServer("categories", dbPoolCon)
+  # Move server logic for CRUD operations
   singleColumnCRUDServer("categories", dbPoolCon, "categories", "category_name")
   subCategoriesCRUDServer("sub_categories", dbPoolCon, tabs_input = reactive(input$tabs))
   singleColumnCRUDServer("titles", dbPoolCon, "titles", "title_text")
@@ -115,7 +116,6 @@ server <- function(input, output, session) {
   onStop(function() {
     poolClose(dbPoolCon)
   })
-  
 }
 
 shinyApp(ui, server)
