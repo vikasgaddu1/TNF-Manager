@@ -138,6 +138,7 @@ reportingEffortsServer <- function(id, pool) {
     output$table <- DT::renderDataTable({
       DT::datatable(
         data(),
+        filter = "top",
         colnames = c("ID","Study", "Database Release", "Reporting Effort", "Updated At"),
         selection = "single",
         rownames = FALSE,

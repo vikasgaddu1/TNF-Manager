@@ -21,14 +21,6 @@ genericCRUDUI <- function(id, title) {
         "Delete Record",
         class = "btn btn-danger",
         icon = icon("trash")
-      ),
-      actionButton(
-        ns("refresh"),
-        label = NULL,
-        icon = icon("sync"),
-        class = "btn btn-outline-secondary",
-        title = "Refresh data",
-        style = "border-radius: 50%;"
       )
     ),
     br(),

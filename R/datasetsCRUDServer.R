@@ -277,6 +277,7 @@ datasetsCRUDServer <- function(id, pool) {
     output$table <- DT::renderDataTable({
       DT::datatable(
         data(),
+        filter = "top",
         colnames = c(
           "ID" = "id", 
           "Dataset Type" = "dataset_type", 

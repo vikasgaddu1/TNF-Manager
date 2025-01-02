@@ -53,49 +53,6 @@ associateTask_RE_UI <- function(id, title) {
     ),
     
     # Main content
-    fluidRow(
-      tabBox(
-        id = "crud_tabs",
-        width = 12,
-        tabPanel(
-          "TFL Tracker",
-          
-          # Save button
-          column(
-            width = 3,
-            div(
-              style = "margin-top: 10px; margin-bottom: 10px;",
-              actionButton(
-                ns("save_selection"),
-                "Save Selection",
-                class = "btn btn-success btn-block",
-                icon = icon("save")
-              )
-            )
-          ),
-          
-          # Search box
-          column(
-            width = 4,
-            div(
-              class = "search-box",
-              icon("search", class = "search-icon"),
-              textInput(
-                ns("search"),
-                label = NULL,
-                placeholder = "Enter keywords to filter...",
-                width = "100%"
-              )
-            )
-          ),
-          
-          # Table output
-          div(
-            class = "table-container",
-            rHandsontableOutput(ns("reports_table"))
-          )
-        )
-      )
-    )
+    at_tfl_UI(id = ns("at_tfl"))
   )
 }

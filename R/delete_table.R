@@ -1,4 +1,11 @@
 #  dbPoolCon <- dbPool(RSQLite::SQLite(), dbname = "data/database.sqlite", create = TRUE)
+# dbExecute(dbPoolCon, "
+# DROP TABLE reporting_effort_reports;
+# ")
+# dbExecute(dbPoolCon, "
+# DROP TABLE reporting_effort_datasets;
+# ")
+
 #  dbExecute(
 #    dbPoolCon,
 # "ALTER TABLE report_programming_tracker RENAME TO report_programming_tracker_old;")

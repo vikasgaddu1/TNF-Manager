@@ -125,7 +125,7 @@ programmingTrackerServer <- function(id, pool, tabs_input) {
     ON rpt.production_programmer_id = prod.id
   LEFT JOIN users qc
     ON rpt.qc_programmer_id = qc.id
-  WHERE rpt.reporting_effort_id = %d and rpt.report_type = 'TFL'
+  WHERE rpt.reporting_effort_id = %d 
   GROUP BY
     rpt.id,
     re.study,
@@ -178,7 +178,6 @@ programmingTrackerServer <- function(id, pool, tabs_input) {
         paste0("tracker_data_", Sys.Date(), ".xlsx")
       },
       content = function(file) {
-        library(openxlsx)  # Ensure the openxlsx package is installed
         df <- tracker_data()
         
         # Check if data is available

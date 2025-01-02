@@ -247,6 +247,7 @@ categoriesCRUDServer <- function(id, pool) {
         options = list(
           columnDefs = list(
             list(
+              searching = T,
               targets = c(0,2),  # Hide ID (0-based index)
               visible = FALSE
             )

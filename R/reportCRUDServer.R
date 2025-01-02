@@ -129,6 +129,7 @@ reportCRUDServer <- function(id, pool, tabs_input) {
       data <- data() # Ensure the reactive data is fetched
       DT::datatable(
         data,
+        filter = "top",
         colnames = c(
           "ID" = "id",
           "Report Key" = "report_key",
