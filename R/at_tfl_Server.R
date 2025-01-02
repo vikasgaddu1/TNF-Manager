@@ -1,4 +1,4 @@
-at_tfl_Server <- function(id, pool, reporting_effort) {
+at_tfl_Server <- function(id, pool, reporting_effort,reporting_effort_label) {
   moduleServer(
     id,
     function(input, output, session) {
@@ -197,23 +197,27 @@ at_tfl_Server <- function(id, pool, reporting_effort) {
 
       output$download_tnf <- downloadHandler(
         filename = function() {
-          paste0("tracker_data_","_", Sys.Date(), ".xlsx")
+          req(reporting_effort_label()) # Ensure the reactive value is available
+          paste0("tracker_data_", reporting_effort_label(), "_", Sys.Date(), ".xlsx")
         },
         content = function(file) {
-          df <- tfl_data()
+          df <- tfl_data() # Assuming tfl_data is available
+          req(df) # Ensure data is available
+          
           df <- df %>%
             dplyr::select(-c('Selected', 'id')) # Remove Selected and ID column
           
           # Check if data is available
-          if (is.null(df) || nrow(df) == 0) {
+          if (nrow(df) == 0) {
             showNotification("No data available to download.", type = "warning")
             return(NULL)
           }
           
           # Write data to an Excel file
-          write.xlsx(df, file)
+          openxlsx::write.xlsx(df, file)
         }
       )
+      
       
 
       
