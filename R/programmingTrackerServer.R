@@ -1,4 +1,4 @@
-reportProgrammingTrackerServer <- function(id, pool, tabs_input) {
+programmingTrackerServer <- function(id, pool, tabs_input) {
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
     
@@ -125,7 +125,7 @@ reportProgrammingTrackerServer <- function(id, pool, tabs_input) {
     ON rpt.production_programmer_id = prod.id
   LEFT JOIN users qc
     ON rpt.qc_programmer_id = qc.id
-  WHERE rpt.reporting_effort_id = %d
+  WHERE rpt.reporting_effort_id = %d and rpt.report_type = 'TFL'
   GROUP BY
     rpt.id,
     re.study,
@@ -462,7 +462,7 @@ reportProgrammingTrackerServer <- function(id, pool, tabs_input) {
            due_date = ?,
            priority = ?,
            status = ?
-       WHERE id = ?",
+       WHERE id = ? AND report_type = 'TFL';",
           params = list(
             prod_id,
             as.character(assign_date),

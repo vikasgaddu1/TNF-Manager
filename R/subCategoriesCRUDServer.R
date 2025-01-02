@@ -7,7 +7,7 @@ subCategoriesCRUDServer <- function(id, pool,tabs_input) {
 
     # Auto-refresh categories when tab is selected
     observeEvent(tabs_input(), {
-      if (tabs_input() == "sub_categories") {
+      if (tabs_input() == "Sub Categories") {
         # Add your logic here for when "sub_categories" is selected
         refresh_trigger(refresh_trigger() + 1)
         showNotification("Refreshing sub-categories", type = "message", duration = 1)

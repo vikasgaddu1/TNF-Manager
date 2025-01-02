@@ -1,4 +1,4 @@
-reportingEffortReportsServer <- function(id, pool, tabs_input) {
+associateTask_RE_Server <- function(id, pool, tabs_input) {
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
     
@@ -46,6 +46,7 @@ reportingEffortReportsServer <- function(id, pool, tabs_input) {
       INSERT INTO report_programming_tracker (
           reporting_effort_id, 
           report_id, 
+          report_type,
           production_programmer_id, 
           qc_programmer_id, 
           assign_date, 
@@ -56,6 +57,7 @@ reportingEffortReportsServer <- function(id, pool, tabs_input) {
       SELECT 
           rer.reporting_effort_id,
           rer.report_id,
+          'TFL',  -- Default value for report_type
           NULL,  -- Default value for production_programmer_id
           NULL,  -- Default value for qc_programmer_id
           NULL,  -- Default assign_date
@@ -76,11 +78,12 @@ reportingEffortReportsServer <- function(id, pool, tabs_input) {
         # Step 2: Delete Orphaned Records
         dbExecute(pool, "
       DELETE FROM report_programming_tracker
-WHERE NOT EXISTS (
+WHERE report_type = 'TFL' and  NOT EXISTS (
     SELECT 1
     FROM reporting_effort_reports
     WHERE reporting_effort_reports.reporting_effort_id = report_programming_tracker.reporting_effort_id
       AND reporting_effort_reports.report_id = report_programming_tracker.report_id
+
 );
     ")
         
@@ -96,11 +99,11 @@ WHERE NOT EXISTS (
       req(input$reporting_effort)
       refresh_trigger() # Depend on refresh_trigger for updates
       
-      data <- tryCatch({
+      tfl_data <- tryCatch({
         dbGetQuery(
           pool,
           paste(
-            "SELECT r.id , r.report_key AS 'Report Key', r.report_type AS 'Report Type', 
+            "SELECT r.id , r.report_key AS 'Report Key', r.title_key as 'Title Key', r.report_type AS 'Report Type', 
                     c.category_name AS 'Category', sc.sub_category_name AS 'Subcategory', 
                     r.report_ich_number AS 'ICH Number', p.population_text AS 'Population',
                     t.title_text AS 'Title', 
@@ -130,12 +133,12 @@ WHERE NOT EXISTS (
       
       # Apply filtering based on the search box input
       if (!is.null(input$search) && input$search != "") {
-        data <- data %>%
+        tfl_data <- tfl_data %>%
           dplyr::filter_at(vars(`Report Key`, `Report Type`, `Category`, `Subcategory`, `Population`, `Title`, `Footnotes`),
                            any_vars(stringr::str_detect(., stringr::fixed(input$search, ignore_case = TRUE))))
       }
       
-      data
+      tfl_data
     })
     
     # Render rHandsontable
@@ -143,8 +146,8 @@ WHERE NOT EXISTS (
       req(reports())
       # Remove id from display but keep it for backend operations
       reports_data <- reports() %>%
-        select(id,Selected, `Report Key`, `Report Type`, Category, Subcategory, `ICH Number`, Population, Title, Footnotes) %>% 
-        arrange(`Report Type`,`Report Key`, Category, Subcategory, Population, `ICH Number`)
+        select(id,Selected,`Report Type`, `Report Key`,`Title Key`,  Category, Subcategory, `ICH Number`, Population, Title, Footnotes) %>% 
+        arrange(`Report Type`,`Report Key`, `Title Key`,Category, Subcategory, Population, `ICH Number`)
       
       rhandsontable(
         reports_data,
@@ -153,8 +156,9 @@ WHERE NOT EXISTS (
       ) %>%
         hot_col("id", readOnly = TRUE, width = 1) %>% 
         hot_col("Selected", type = "checkbox", halign = "center") %>% # Make Selected column a checkbox
-        hot_col("Report Key", readOnly = TRUE, halign = "left") %>%
         hot_col("Report Type", readOnly = TRUE, halign = "left") %>%
+        hot_col("Report Key", readOnly = TRUE, halign = "left") %>%
+        hot_col("Title Key", readOnly = TRUE, halign = "left") %>%
         hot_col("Category", readOnly = TRUE, halign = "left") %>%
         hot_col("Subcategory", readOnly = TRUE, halign = "left") %>%
         hot_col("ICH Number", readOnly = TRUE, halign = "center") %>%

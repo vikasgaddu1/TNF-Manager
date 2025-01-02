@@ -1,5 +1,59 @@
-# dbPoolCon <- dbPool(RSQLite::SQLite(), dbname = "data/database.sqlite", create = TRUE)
-# dbExecute(dbPoolCon, "DROP TABLE report_programming_tracker;")
+#  dbPoolCon <- dbPool(RSQLite::SQLite(), dbname = "data/database.sqlite", create = TRUE)
+#  dbExecute(
+#    dbPoolCon,
+# "ALTER TABLE report_programming_tracker RENAME TO report_programming_tracker_old;")
+# tables
+# dbExecute(
+#   dbPoolCon,
+#   "CREATE TABLE report_programming_tracker (
+#     id INTEGER PRIMARY KEY,
+#     reporting_effort_id INTEGER NOT NULL,
+#     report_type TEXT NOT NULL,
+#     report_id INTEGER NOT NULL,
+#     priority INTEGER,
+#     production_programmer_id INTEGER,
+#     assign_date DATE,
+#     qc_programmer_id INTEGER,
+#     due_date DATE,
+#     status TEXT,
+#     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+#     FOREIGN KEY (reporting_effort_id) REFERENCES reporting_efforts (id) ON DELETE CASCADE,
+#     FOREIGN KEY (production_programmer_id) REFERENCES users (id),
+#     FOREIGN KEY (qc_programmer_id) REFERENCES users (id),
+#     UNIQUE (reporting_effort_id, report_id, report_type)
+# );")
+# 
+# dbExecute(
+#   dbPoolCon,
+#   "INSERT INTO report_programming_tracker
+# SELECT * FROM report_programming_tracker_old;")
+# 
+# dbExecute(
+#   dbPoolCon,
+#   "DROP TABLE report_programming_tracker_old;")
+# 
+# 
+#  dbExecute(
+#    dbPoolCon,
+#    "ALTER TABLE report_programming_tracker
+# ADD CONSTRAINT unique_reporting_effort_report
+# UNIQUE (reporting_effort_id, report_id, report_type);")
+ 
+ # # Step 1: Add the new column with a default value
+ # dbExecute(
+ #   dbPoolCon,
+ #   "ALTER TABLE report_programming_tracker
+ #   ADD COLUMN report_type TEXT DEFAULT 'TFL';"
+ # )
+ # 
+ # # Step 2: Update any existing rows (optional, as the default applies for new rows)
+ # dbExecute(
+ #   dbPoolCon,
+ #   "UPDATE report_programming_tracker
+ #   SET report_type = 'TFL'
+ #   WHERE report_type IS NULL;"
+ # )
+ # dbExecute(dbPoolCon, "DROP TABLE dataset;")
 # dbExecute(dbPoolCon, "DROP TABLE reporting_effort_reports;")
 # data <- dbGetQuery(dbPoolCon, "select * from report_programming_tracker;")
 # print(data)

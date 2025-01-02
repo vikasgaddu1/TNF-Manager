@@ -190,11 +190,11 @@ reportCRUDServer <- function(id, pool, tabs_input) {
           selectizeInput(
             ns("report_type"),
             "Select Report Type",
-            choices = c("Table", "Listing", "Figure", "SDTM", "ADaM")
+            choices = c("Table", "Listing", "Figure"),
+            selected = NULL
           ),
           uiOutput(ns("category_dropdown")),
           uiOutput(ns("sub_category_dropdown")),
-          
           textInput(
             ns("report_key"),
             "Report Key",
@@ -231,7 +231,7 @@ reportCRUDServer <- function(id, pool, tabs_input) {
             "Select Population",
             choices = populations()$population_text
           )
-        ),
+          ),
         footer = div(
           class = "modal-footer",
           modalButton("Cancel", icon = icon("times")),
@@ -472,14 +472,14 @@ reportCRUDServer <- function(id, pool, tabs_input) {
           title = div(icon("edit"), "Edit Report"),
           div(
             class = "form-group",
-            uiOutput(ns("category_dropdown")),
-            uiOutput(ns("sub_category_dropdown")),
             selectizeInput(
               ns("report_type"), 
               "Select Report Type",
               choices = c("Table", "Listing", "Figure"),
               selected = report_data$report_type
             ),
+            uiOutput(ns("category_dropdown")),
+            uiOutput(ns("sub_category_dropdown")),
             textInput(
               ns("report_key"),
               "Report Key",

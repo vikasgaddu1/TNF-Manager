@@ -1,4 +1,4 @@
-reportProgrammingTrackerUI <- function(id, title = "Programming Tracker") {
+programmingTrackerUI <- function(id, title = "Programming Tracker") {
   ns <- NS(id)
   
   fluidPage(

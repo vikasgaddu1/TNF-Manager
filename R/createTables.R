@@ -1,4 +1,18 @@
 createTables <- function(pool) {
+  
+  dbExecute(
+    pool,
+    "CREATE TABLE IF NOT EXISTS datasets (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      dataset_type TEXT NOT NULL,
+      category_name TEXT UNIQUE NOT NULL,
+      dataset_name TEXT NOT NULL,
+      dataset_label TEXT NOT NULL,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );"
+  )
+  
+  
   # Categories table
   dbExecute(
     pool,
@@ -128,6 +142,19 @@ createTables <- function(pool) {
   );"
   )
   
+  dbExecute(
+    pool,
+    "CREATE TABLE IF NOT EXISTS reporting_effort_datasets (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      reporting_effort_id INTEGER NOT NULL,
+      dataset_id INTEGER NOT NULL,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (reporting_effort_id) REFERENCES reporting_efforts (id) ON DELETE CASCADE,
+      FOREIGN KEY (dataset_id) REFERENCES datasets (id) ON DELETE CASCADE,
+      UNIQUE (reporting_effort_id, dataset_id)
+  );"
+  )
+  
   # Users table
   dbExecute(
     pool,
@@ -145,6 +172,7 @@ createTables <- function(pool) {
     "CREATE TABLE IF NOT EXISTS report_programming_tracker (
       id INTEGER PRIMARY KEY,
       reporting_effort_id INTEGER NOT NULL,
+      report_type TEXT NOT NULL,
       report_id INTEGER NOT NULL,
       priority INTEGER,
       production_programmer_id INTEGER,
@@ -154,10 +182,9 @@ createTables <- function(pool) {
       status TEXT,
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (reporting_effort_id) REFERENCES reporting_efforts (id) ON DELETE CASCADE,
-      FOREIGN KEY (report_id) REFERENCES reports (id) ON DELETE CASCADE,
       FOREIGN KEY (production_programmer_id) REFERENCES users (id),
       FOREIGN KEY (qc_programmer_id) REFERENCES users (id),
-      UNIQUE (reporting_effort_id, report_id)
+      UNIQUE (reporting_effort_id, report_id, report_type)
     );
 "
   )

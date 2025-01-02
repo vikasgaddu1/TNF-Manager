@@ -47,6 +47,7 @@ ui <- dashboardPage(
     sidebarMenu(
       id = "tabs",
       menuItem("CRUD Menu", tabName = "crud_menu", icon = icon("th"), badgeLabel = "Admin", badgeColor = "red"),
+      menuItem("Datasets", tabName = "datasets", icon = icon("database")),
       menuItem("Reports", tabName = "reports", icon = icon("book")),
       menuItem(
         "Reporting Effort",
@@ -79,10 +80,11 @@ ui <- dashboardPage(
             tabPanel("Titles", genericCRUDUI("titles", "Titles")),
             tabPanel("Footnotes", genericCRUDUI("footnotes", "Footnotes")),
             tabPanel("Populations", genericCRUDUI("populations", "Populations")),
-            tabPanel("users", genericCRUDUI("users", "Users")),
+            tabPanel("Users", genericCRUDUI("users", "Users")),
           )
         )
       ),
+      tabItem("datasets", genericCRUDUI("datasets", "Datasets")),
       tabItem("reports", genericCRUDUI("reports", "Reports")),
       tabItem(
         "reporting_effort",
@@ -90,9 +92,9 @@ ui <- dashboardPage(
       ),
       tabItem(
         "re_reports",
-        reportingEffortReportsUI("re_reports", "Reporting Effort Reports")
+        associateTask_RE_UI("re_reports", "Reporting Effort Reports")
       ),
-      tabItem("tracker", reportProgrammingTrackerUI("tracker"))
+      tabItem("tracker", programmingTrackerUI("tracker"))
       # Add more tabItems for other tables
     )
   ),
@@ -102,15 +104,16 @@ ui <- dashboardPage(
 server <- function(input, output, session) {
   # Move server logic for CRUD operations
   singleColumnCRUDServer("categories", dbPoolCon, "categories", "category_name")
-  subCategoriesCRUDServer("sub_categories", dbPoolCon, tabs_input = reactive(input$tabs))
+  subCategoriesCRUDServer("sub_categories", dbPoolCon, tabs_input = reactive(input$crud_tabs))
   singleColumnCRUDServer("titles", dbPoolCon, "titles", "title_text")
   singleColumnCRUDServer("footnotes", dbPoolCon, "footnotes", "footnote_text")
   singleColumnCRUDServer("populations", dbPoolCon, "populations", "population_text")
+  datasetsCRUDServer("datasets", dbPoolCon)
   reportCRUDServer("reports", dbPoolCon, tabs_input = reactive(input$tabs))
   reportingEffortsServer("reporting_effort", dbPoolCon)
   usersServer("users", dbPoolCon)
-  reportingEffortReportsServer("re_reports", dbPoolCon, tabs_input = reactive(input$tabs))
-  reportProgrammingTrackerServer("tracker", dbPoolCon, tabs_input = reactive(input$tabs))
+  associateTask_RE_Server("re_reports", dbPoolCon, tabs_input = reactive(input$tabs))
+  programmingTrackerServer("tracker", dbPoolCon, tabs_input = reactive(input$tabs))
   
   # Disconnect pool when session ends
   onStop(function() {
