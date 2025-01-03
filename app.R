@@ -27,7 +27,8 @@ load_libraries(
     "openxlsx",
     "plotly",
     "gtsummary",
-    "gt"
+    "gt",
+    "dashboardthemes"
   )
 )
 
@@ -42,18 +43,16 @@ createTables(dbPoolCon)
 
 
 ui <- dashboardPage(
-  dashboardHeader(disable = TRUE),
+  dashboardHeader(title = shinyDashboardLogo(
+    theme = "onenote",
+    boldText = "Geron",
+    mainText = "App",
+    badgeText = "v0.1"
+  )),
   dashboardSidebar(
     sidebarMenu(
       id = "tabs",
       menuItem("CRUD Menu", tabName = "crud_menu", icon = icon("th"), badgeLabel = "Admin", badgeColor = "red"),
-      menuItem("Datasets", tabName = "datasets", icon = icon("database")),
-      menuItem("Reports", tabName = "reports", icon = icon("book")),
-      menuItem(
-        "Reporting Effort",
-        tabName = "reporting_effort",
-        icon = icon("chart-line")
-      ),
       menuItem(
         "Reporting Effort Reports",
         tabName = "re_reports",
@@ -75,20 +74,17 @@ ui <- dashboardPage(
           tabBox(
             id = "crud_tabs",
             width = 12,
-            tabPanel("Categories", genericCRUDUI("categories", "Categories")),
-            tabPanel("Sub Categories", genericCRUDUI("sub_categories", "Sub-Categories")),
-            tabPanel("Titles", genericCRUDUI("titles", "Titles")),
-            tabPanel("Footnotes", genericCRUDUI("footnotes", "Footnotes")),
-            tabPanel("Populations", genericCRUDUI("populations", "Populations")),
-            tabPanel("Users", genericCRUDUI("users", "Users")),
+            tabPanel("Categories", icon = icon("folder"), genericCRUDUI("categories", "Categories")),
+            tabPanel("Sub Categories", icon = icon("folder-tree"), genericCRUDUI("sub_categories", "Sub-Categories")),
+            tabPanel("Titles", icon = icon("heading"), genericCRUDUI("titles", "Titles")),
+            tabPanel("Footnotes", icon = icon("note-sticky"), genericCRUDUI("footnotes", "Footnotes")),
+            tabPanel("Populations", icon = icon("users"), genericCRUDUI("populations", "Populations")),
+            tabPanel("Users", icon = icon("user"), genericCRUDUI("users", "Users")),
+            tabPanel("Datasets", icon = icon("database"), genericCRUDUI("datasets", "Datasets")),
+            tabPanel("Reports", icon = icon("file-lines"), genericCRUDUI("reports", "Reports")),
+            tabPanel("Reporting Effort", icon = icon("chart-line"), genericCRUDUI("reporting_effort", "Reporting Effort"))
           )
         )
-      ),
-      tabItem("datasets", genericCRUDUI("datasets", "Datasets")),
-      tabItem("reports", genericCRUDUI("reports", "Reports")),
-      tabItem(
-        "reporting_effort",
-        genericCRUDUI("reporting_effort", "Reporting Effort")
       ),
       tabItem(
         "re_reports",
