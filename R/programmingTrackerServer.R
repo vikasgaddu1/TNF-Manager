@@ -461,7 +461,7 @@ programmingTrackerServer <- function(id, pool, tabs_input) {
            due_date = ?,
            priority = ?,
            status = ?
-       WHERE id = ? AND report_type = 'TFL';",
+       WHERE id = ? ;",
           params = list(
             prod_id,
             as.character(assign_date),
