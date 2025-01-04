@@ -68,8 +68,14 @@ programmingTrackerServer <- function(id, pool, tabs_input) {
             sc.sub_category_name AS subcategory,
             r.report_ich_number AS ich_number,
             p.population_text AS population,
-            GROUP_CONCAT(t.title_text, ' | ') AS titles,
-            GROUP_CONCAT(f.footnote_text, ', ') AS footnotes,
+            (SELECT GROUP_CONCAT(t2.title_text, '@#')
+             FROM report_titles rt2 
+             JOIN titles t2 ON rt2.title_id = t2.id 
+             WHERE rt2.report_id = r.id) AS titles,
+            (SELECT GROUP_CONCAT(f2.footnote_text, '@#')
+             FROM report_footnotes rf2 
+             JOIN footnotes f2 ON rf2.footnote_id = f2.id 
+             WHERE rf2.report_id = r.id) AS footnotes,
             prod.username AS production_programmer,
             qc.username AS qc_programmer,
             rpt.assign_date,
@@ -90,19 +96,12 @@ programmingTrackerServer <- function(id, pool, tabs_input) {
             ON r.report_sub_category_id = sc.id
           LEFT JOIN populations p
             ON r.population_id = p.id
-          LEFT JOIN report_titles rt
-            ON r.id = rt.report_id
-          LEFT JOIN titles t
-            ON rt.title_id = t.id
-          LEFT JOIN report_footnotes rf
-            ON r.id = rf.report_id
-          LEFT JOIN footnotes f
-            ON rf.footnote_id = f.id
           LEFT JOIN users prod
             ON rpt.production_programmer_id = prod.id
           LEFT JOIN users qc
             ON rpt.qc_programmer_id = qc.id
-          WHERE rpt.reporting_effort_id = %d
+          WHERE rpt.reporting_effort_id = %d 
+          AND rpt.report_type in ('Table','Listing','Figure')
           GROUP BY
             rpt.id,
             re.study,
@@ -110,6 +109,7 @@ programmingTrackerServer <- function(id, pool, tabs_input) {
             re.reporting_effort,
             r.report_key,
             r.report_type,
+            r.title_key,
             c.category_name,
             sc.sub_category_name,
             r.report_ich_number,
@@ -118,8 +118,9 @@ programmingTrackerServer <- function(id, pool, tabs_input) {
             qc.username,
             rpt.assign_date,
             rpt.due_date,
+            rpt.priority,
             rpt.status
-  ",
+ORDER BY rpt.priority DESC, rpt.assign_date DESC;  ",
         as.integer(input$reporting_effort)
       )
       

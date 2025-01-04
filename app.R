@@ -1,10 +1,4 @@
 
-
-
-# Source utility functions
-source("R/createTables.R")
-source("R/functions.R")
-
 # load the libraries related to shiny
 load_libraries(
   c(
@@ -47,7 +41,7 @@ ui <- dashboardPage(
     theme = "onenote",
     boldText = "Geron",
     mainText = "App",
-    badgeText = "v0.1"
+    badgeText = "v0.2"
   )),
   dashboardSidebar(
     sidebarMenu(

@@ -1,9 +1,15 @@
 
 
-tflTrackerServer <- function(id, tracker_data, pool, refresh_trigger) {
+tflTrackerServer <- function(id, data, pool, refresh_trigger) {
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
 
+    # subset tracker_data to report_type in Table, Listing and Figure
+    tracker_data <- reactive({
+      data() %>%
+        filter(report_type %in% c("Table", "Listing", "Figure"))
+    })
+    
     production_programmers <- reactive({
       tryCatch({
         refresh_trigger()

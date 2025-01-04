@@ -88,7 +88,7 @@ reportCRUDServer <- function(id, pool, tabs_input) {
       # Get titles
       titles_query <- "
     SELECT rt.report_id,
-           GROUP_CONCAT(t.title_text, ', ') as titles
+           GROUP_CONCAT(t.title_text, '@# ') as titles
     FROM report_titles rt
     JOIN titles t ON rt.title_id = t.id
     GROUP BY rt.report_id
@@ -98,7 +98,7 @@ reportCRUDServer <- function(id, pool, tabs_input) {
       # Get footnotes
       footnotes_query <- "
     SELECT rf.report_id,
-           GROUP_CONCAT(f.footnote_text, ', ') as footnotes
+           GROUP_CONCAT(f.footnote_text, '@# ') as footnotes
     FROM report_footnotes rf
     JOIN footnotes f ON rf.footnote_id = f.id
     GROUP BY rf.report_id
@@ -270,7 +270,6 @@ reportCRUDServer <- function(id, pool, tabs_input) {
         input$report_ich_number,
         input$report_type,
         input$titles,
-        input$footnotes,
         input$populations
       )
       
@@ -395,9 +394,9 @@ reportCRUDServer <- function(id, pool, tabs_input) {
         )
         
         report_id <- dbGetQuery(pool, "SELECT last_insert_rowid()")
-        print(typeof(report_id[[1, 1]]))
-        
-        print(paste("Inserted report ID:", report_id[[1, 1]])) # Debugging
+        # print(typeof(report_id[[1, 1]]))
+        # 
+        # print(paste("Inserted report ID:", report_id[[1, 1]])) # Debugging
         
         # Insert report titles
         if (!is.null(input$titles)) {
@@ -405,7 +404,7 @@ reportCRUDServer <- function(id, pool, tabs_input) {
             sequence <- match(title_text, input$titles) # Get the first match
             
             # Ensure all parameters have valid values
-            print(list(report_id = report_id[[1, 1]], sequence = sequence, title_text = title_text)) # Debugging
+            # print(list(report_id = report_id[[1, 1]], sequence = sequence, title_text = title_text)) # Debugging
             
             dbExecute(
               pool,
@@ -468,7 +467,21 @@ reportCRUDServer <- function(id, pool, tabs_input) {
       selected_row <- input$table_rows_selected
       if (length(selected_row) > 0) {
         report_data <- data()[selected_row, ]
-        print(report_data)
+        print(report_data$footnotes)
+        
+        selected_footnotes <- if (!is.null(report_data$footnotes) && is.character(report_data$footnotes)) {
+          trimws(unlist(strsplit(report_data$footnotes, "@#")))
+        } else {
+          NULL
+        }
+        
+        selected_titles <- if (!is.null(report_data$titles) && is.character(report_data$titles)) {
+          trimws(unlist(strsplit(report_data$titles, "@#")))
+        } else {
+          NULL
+        }
+        
+        
         showModal(modalDialog(
           title = div(icon("edit"), "Edit Report"),
           div(
@@ -500,14 +513,14 @@ reportCRUDServer <- function(id, pool, tabs_input) {
               ns("titles"),
               "Select Titles",
               choices = titles()$title_text,
-              selected = NULL,
+              selected = selected_titles,
               multiple = TRUE
             ),
             selectizeInput(
               ns("footnotes"),
               "Select Footnotes",
               choices = footnotes()$footnote_text,
-              selected = NULL,
+              selected = selected_footnotes,
               multiple = TRUE
             ),
             selectizeInput(
@@ -620,7 +633,6 @@ reportCRUDServer <- function(id, pool, tabs_input) {
         input$report_ich_number,
         input$report_type,
         input$titles,
-        input$footnotes,
         input$populations
       )
       

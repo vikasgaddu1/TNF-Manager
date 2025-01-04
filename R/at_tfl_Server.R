@@ -25,7 +25,7 @@ at_tfl_Server <- function(id, pool, reporting_effort,reporting_effort_label) {
       SELECT 
           rer.reporting_effort_id,
           rer.report_id,
-          'TFL',  -- Default value for report_type
+          rer.report_type,
           NULL,  -- Default value for production_programmer_id
           NULL,  -- Default value for qc_programmer_id
           NULL,  -- Default assign_date
@@ -40,17 +40,18 @@ at_tfl_Server <- function(id, pool, reporting_effort,reporting_effort_label) {
           rer.reporting_effort_id = rpt.reporting_effort_id
           AND rer.report_id = rpt.report_id
       WHERE 
-          rpt.report_id IS NULL;
+          rpt.report_id IS NULL and rer.report_type IN ('Table', 'Listing', 'Figure') ;
     ")
           
           # Step 2: Delete Orphaned Records
           dbExecute(pool, "
             DELETE FROM report_programming_tracker
-              WHERE report_type = 'TFL' and  NOT EXISTS (
+              WHERE report_type IN ('Table', 'Listing', 'Figure')  and  NOT EXISTS (
                 SELECT 1
                  FROM reporting_effort_reports
                   WHERE reporting_effort_reports.reporting_effort_id = report_programming_tracker.reporting_effort_id
-                        AND reporting_effort_reports.report_id = report_programming_tracker.report_id
+                        AND reporting_effort_reports.report_id = report_programming_tracker.report_id AND
+                        report_type IN ('Table', 'Listing', 'Figure')
 
           );
     ")
@@ -72,24 +73,32 @@ at_tfl_Server <- function(id, pool, reporting_effort,reporting_effort_label) {
           dbGetQuery(
             pool,
             paste(
-              "SELECT r.id , r.report_key AS 'Report Key', r.title_key as 'Title Key', r.report_type AS 'Report Type', 
-                    c.category_name AS 'Category', sc.sub_category_name AS 'Subcategory', 
-                    r.report_ich_number AS 'ICH Number', p.population_text AS 'Population',
-                    t.title_text AS 'Title', 
-                    GROUP_CONCAT(f.footnote_text, ', ') AS 'Footnotes',
-                    CASE WHEN rer.reporting_effort_id IS NOT NULL THEN 1 ELSE 0 END AS Selected
-             FROM reports r
-             LEFT JOIN categories c ON r.report_category_id = c.id
-             LEFT JOIN sub_categories sc ON r.report_sub_category_id = sc.id
-             LEFT JOIN populations p ON r.population_id = p.id
-             LEFT JOIN report_titles rt ON r.id = rt.report_id
-             LEFT JOIN titles t ON rt.title_id = t.id
-             LEFT JOIN report_footnotes rf ON r.id = rf.report_id
-             LEFT JOIN footnotes f ON rf.footnote_id = f.id
-             LEFT JOIN reporting_effort_reports rer
-             ON r.id = rer.report_id AND rer.reporting_effort_id = ",
-              reporting_effort(), "
-             GROUP BY r.id;"
+              "SELECT r.id, 
+               r.report_key AS 'Report Key', 
+               r.title_key as 'Title Key', 
+               r.report_type AS 'Report Type', 
+               c.category_name AS 'Category', 
+               sc.sub_category_name AS 'Subcategory', 
+               r.report_ich_number AS 'ICH Number', 
+               p.population_text AS 'Population',
+               (SELECT GROUP_CONCAT(t2.title_text, '@#')
+                FROM report_titles rt2 
+                JOIN titles t2 ON rt2.title_id = t2.id 
+                WHERE rt2.report_id = r.id) AS 'Title',
+               (SELECT GROUP_CONCAT(f2.footnote_text, '@#')
+                FROM report_footnotes rf2 
+                JOIN footnotes f2 ON rf2.footnote_id = f2.id 
+                WHERE rf2.report_id = r.id) AS 'Footnotes',
+               CASE WHEN rer.reporting_effort_id IS NOT NULL THEN 1 ELSE 0 END AS Selected
+                  FROM reports r
+                  LEFT JOIN categories c ON r.report_category_id = c.id
+                  LEFT JOIN sub_categories sc ON r.report_sub_category_id = sc.id
+                  LEFT JOIN populations p ON r.population_id = p.id
+                  LEFT JOIN reporting_effort_reports rer 
+                       ON r.id = rer.report_id 
+                       AND rer.reporting_effort_id = ", reporting_effort(), 
+                       "WHERE r.report_type IN ('Table', 'Listing', 'Figure')
+                  GROUP BY r.id;"
             )
           ) %>%
             dplyr::mutate(Selected = as.logical(Selected)) %>%
@@ -127,7 +136,7 @@ at_tfl_Server <- function(id, pool, reporting_effort,reporting_effort_label) {
         # Apply search filter
         if (!is.null(input$search) && input$search != "") {
           filtered_data <- filtered_data %>%
-            dplyr::filter_at(vars(`Report Key`, `Report Type`, `Category`, `Subcategory`, `Population`, `Title`, `Footnotes`),
+            dplyr::filter_at(vars(`Report Key`, `Report Type`,`ICH Number`, `Category`, `Subcategory`, `Population`, `Title`, `Footnotes`),
                              any_vars(stringr::str_detect(., stringr::fixed(input$search, ignore_case = TRUE))))
         }
         
@@ -201,11 +210,11 @@ at_tfl_Server <- function(id, pool, reporting_effort,reporting_effort_label) {
           paste0("tracker_data_", reporting_effort_label(), "_", Sys.Date(), ".xlsx")
         },
         content = function(file) {
-          df <- tfl_data() # Assuming tfl_data is available
-          req(df) # Ensure data is available
-          
-          df <- df %>%
+          df <- tfl_data() %>%
+            dplyr::filter(Selected) %>%
             dplyr::select(-c('Selected', 'id')) # Remove Selected and ID column
+          
+          req(df) # Ensure data is available
           
           # Check if data is available
           if (nrow(df) == 0) {
@@ -253,12 +262,12 @@ at_tfl_Server <- function(id, pool, reporting_effort,reporting_effort_label) {
           # Delete existing associations for the reporting effort
           dbExecute(pool, paste(
             "DELETE FROM reporting_effort_reports WHERE reporting_effort_id = ",
-            reporting_effort(), ";"
+            reporting_effort(), " and report_type IN ('Table', 'Listing', 'Figure');"
           ))
-          dbExecute(pool, paste(
-            "DELETE FROM report_programming_tracker WHERE reporting_effort_id = ",
-            reporting_effort(), ";"
-          ))
+          # dbExecute(pool, paste(
+          #   "DELETE FROM report_programming_tracker WHERE reporting_effort_id = ",
+          #   reporting_effort(), " and report_type IN ('Table', 'Listing', 'Figure');"
+          # ))
           
           # Insert new associations for selected rows
           selected_reports <- edited_data %>%
@@ -279,23 +288,23 @@ at_tfl_Server <- function(id, pool, reporting_effort,reporting_effort_label) {
             dbExecute(pool, query_reporting_effort)
             
             # Prepare query for report_programming_tracker
-            query_tracker <- paste(
-              "INSERT INTO report_programming_tracker (reporting_effort_id, report_id, report_type) VALUES ",
-              paste(
-                sprintf("(%s, %s, '%s')", 
-                        reporting_effort(), 
-                        selected_reports$id, 
-                        selected_reports$report_type),
-                collapse = ","
-              )
-            )
-            dbExecute(pool, query_tracker)
-          }
+          #   query_tracker <- paste(
+          #     "INSERT INTO report_programming_tracker (reporting_effort_id, report_id, report_type) VALUES ",
+          #     paste(
+          #       sprintf("(%s, %s, '%s')", 
+          #               reporting_effort(), 
+          #               selected_reports$id, 
+          #               selected_reports$report_type),
+          #       collapse = ","
+          #     )
+          #   )
+          #   dbExecute(pool, query_tracker)
+           }
           
-          cat("After insertion\n")
-          # Log the inserted data for debugging
-          rpt <- dbGetQuery(pool, "SELECT * FROM report_programming_tracker;")
-          print(rpt)
+          # cat("After insertion\n")
+          # # Log the inserted data for debugging
+          # rpt <- dbGetQuery(pool, "SELECT * FROM report_programming_tracker;")
+          # print(rpt)
           
           # Refresh trigger
           refresh_trigger(refresh_trigger() + 1)

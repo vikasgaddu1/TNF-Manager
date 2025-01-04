@@ -19,7 +19,7 @@ usersServer <- function(id, pool) {
           selectInput(
             ns("role_input"),
             "Role",
-            choices = c("admin", "user", "production_programmer", "qc_programmer"),
+            choices = c("admin", "user"),
             selected = "user"
           )
         ),
