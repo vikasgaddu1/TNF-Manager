@@ -13,8 +13,7 @@ programmingTrackerUI <- function(id, title = "Programming Tracker") {
     fluidRow(
       column(
         width = 4, 
-        div(
-          class = "well",
+        wellPanel(
           selectInput(
             ns("reporting_effort"),
             label = "Select Reporting Effort:",

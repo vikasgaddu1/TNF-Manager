@@ -58,11 +58,12 @@ associateTask_RE_Server <- function(id, pool, tabs_input) {
     })
     
     # Pass reporting effort id and label to at_tfl_Server
-    at_tfl_Server(
+    refresh_trigger <- at_tfl_Server(
       "at_tfl",
       pool,
       reactive(input$reporting_effort),
-      selected_reporting_effort_label
+      selected_reporting_effort_label,
+      refresh_trigger
     )
   })
 }

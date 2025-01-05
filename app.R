@@ -22,7 +22,8 @@ load_libraries(
     "plotly",
     "gtsummary",
     "gt",
-    "dashboardthemes"
+    "dashboardthemes",
+    "bslib"
   )
 )
 
@@ -56,11 +57,16 @@ ui <- dashboardPage(
         "Programming Tracker",
         tabName = "tracker",
         icon = icon("tasks")
+      ),
+      menuItem(
+        "FAQ",
+        tabName = "faq",
+        icon = icon("question")
       )
       # Add more menu items for other tables
     )
   ),
-  dashboardBody(
+  dashboardBody( 
     tabItems(
       tabItem(
         tabName = "crud_menu",
@@ -84,7 +90,8 @@ ui <- dashboardPage(
         "re_reports",
         associateTask_RE_UI("re_reports", "Reporting Effort Reports")
       ),
-      tabItem("tracker", programmingTrackerUI("tracker"))
+      tabItem("tracker", programmingTrackerUI("tracker")),
+      tabItem("faq", FAQModuleUI("faq"))
       # Add more tabItems for other tables
     )
   ),

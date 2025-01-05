@@ -1,11 +1,11 @@
-at_tfl_Server <- function(id, pool, reporting_effort,reporting_effort_label) {
+at_tfl_Server <- function(id, pool, reporting_effort,reporting_effort_label, refresh_trigger) {
   moduleServer(
     id,
     function(input, output, session) {
       ns <- session$ns
       
       # Trigger to refresh data
-      refresh_trigger <- reactiveVal(0)
+      # refresh_trigger <- reactiveVal(0)
       
       observeEvent(refresh_trigger(), {
         tryCatch({
@@ -316,4 +316,5 @@ at_tfl_Server <- function(id, pool, reporting_effort,reporting_effort_label) {
       
     }
   )
+  return(refresh_trigger)
 }
