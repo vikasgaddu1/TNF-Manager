@@ -1,31 +1,26 @@
 
-# load the libraries related to shiny
-load_libraries(
-  c(
-    "shiny",
-    "shinydashboard",
-    "shinyjs",
-    "shinyWidgets",
-    "shinyalert",
-    "shinybusy",
-    "shinymaterial",
-    "shinythemes",
-    "shinyBS",
-    "DT",
-    "ggplot2",
-    "tidyverse",
-    "RSQLite",
-    "pool",
-    "DBI",
-    "rhandsontable",
-    "openxlsx",
-    "plotly",
-    "gtsummary",
-    "gt",
-    "dashboardthemes",
-    "bslib"
-  )
-)
+library(shiny)
+library(shinydashboard)
+library(shinyjs)
+library(shinyWidgets)
+library(shinyalert)
+library(shinybusy)
+library(shinymaterial)
+library(shinythemes)
+library(shinyBS)
+library(DT)
+library(ggplot2)
+library(tidyverse)
+library(RSQLite)
+library(pool)
+library(DBI)
+library(rhandsontable)
+library(openxlsx)
+library(plotly)
+library(gtsummary)
+library(gt)
+library(dashboardthemes)
+library(bslib)
 
 
 # Create a pool of connections to the database using RSQLite
@@ -38,12 +33,7 @@ createTables(dbPoolCon)
 
 
 ui <- dashboardPage(
-  dashboardHeader(title = shinyDashboardLogo(
-    theme = "onenote",
-    boldText = "Geron",
-    mainText = "App",
-    badgeText = "v0.2"
-  )),
+  dashboardHeader(title = "Geron App v0.2"),
   dashboardSidebar(
     sidebarMenu(
       id = "tabs",
@@ -67,6 +57,10 @@ ui <- dashboardPage(
     )
   ),
   dashboardBody( 
+    tags$head(
+      # Add the favicon here
+      tags$link(rel = "icon", type = "image/x-icon", href = "image/favicon.ico")
+    ),
     tabItems(
       tabItem(
         tabName = "crud_menu",
