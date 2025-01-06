@@ -1,0 +1,13 @@
+name: TNF_Manager
+title: TNF_Manager
+username: rforsas
+account: rforsas
+server: shinyapps.io
+hostUrl: https://api.shinyapps.io/v1
+appId: 13668099
+bundleId:
+url: https://rforsas.shinyapps.io/TNF_Manager/
+version: 1
+asMultiple: FALSE
+asStatic: FALSE
+ignoredFiles: testing.R
