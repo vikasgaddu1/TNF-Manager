@@ -12,8 +12,7 @@ associateTask_RE_Server <- function(id, pool, tabs_input) {
         dbGetQuery(
           pool,
           "SELECT id,
-              study || ' | ' || database_release || ' | ' || reporting_effort AS label,
-              reporting_effort AS reporting_effort_label
+              study || '_' || database_release || '_' || reporting_effort AS label
            FROM reporting_efforts;"
         )
       }, error = function(e) {
@@ -54,7 +53,8 @@ associateTask_RE_Server <- function(id, pool, tabs_input) {
       req(reporting_efforts(), input$reporting_effort)
       reporting_efforts() %>%
         dplyr::filter(id == input$reporting_effort) %>%
-        dplyr::pull(reporting_effort_label)
+        dplyr::pull(label)
+
     })
     
     # Pass reporting effort id and label to at_tfl_Server
@@ -64,6 +64,24 @@ associateTask_RE_Server <- function(id, pool, tabs_input) {
       reactive(input$reporting_effort),
       selected_reporting_effort_label,
       refresh_trigger
+    )
+    
+    refresh_trigger <- at_dataset_Server(
+      "at_sdtm",
+      pool,
+      reactive(input$reporting_effort),
+      selected_reporting_effort_label,
+      refresh_trigger,
+      "SDTM"
+    )
+    
+    refresh_trigger <- at_dataset_Server(
+      "at_adam",
+      pool,
+      reactive(input$reporting_effort),
+      selected_reporting_effort_label,
+      refresh_trigger,
+      "ADaM"
     )
   })
 }

@@ -39,6 +39,7 @@ at_tfl_Server <- function(id, pool, reporting_effort,reporting_effort_label, ref
       ON 
           rer.reporting_effort_id = rpt.reporting_effort_id
           AND rer.report_id = rpt.report_id
+          AND rer.report_type = rpt.report_type
       WHERE 
           rpt.report_id IS NULL and rer.report_type IN ('Table', 'Listing', 'Figure') ;
     ")
@@ -51,6 +52,7 @@ at_tfl_Server <- function(id, pool, reporting_effort,reporting_effort_label, ref
                  FROM reporting_effort_reports
                   WHERE reporting_effort_reports.reporting_effort_id = report_programming_tracker.reporting_effort_id
                         AND reporting_effort_reports.report_id = report_programming_tracker.report_id AND
+                        reporting_effort_reports.report_type = report_programming_tracker.report_type AND
                         report_type IN ('Table', 'Listing', 'Figure')
 
           );
@@ -97,6 +99,7 @@ at_tfl_Server <- function(id, pool, reporting_effort,reporting_effort_label, ref
                   LEFT JOIN reporting_effort_reports rer 
                        ON r.id = rer.report_id 
                        AND rer.reporting_effort_id = ", reporting_effort(), 
+                       "AND rer.report_type = r.report_type",
                        "WHERE r.report_type IN ('Table', 'Listing', 'Figure')
                   GROUP BY r.id;"
             )
@@ -207,7 +210,7 @@ at_tfl_Server <- function(id, pool, reporting_effort,reporting_effort_label, ref
       output$download_tnf <- downloadHandler(
         filename = function() {
           req(reporting_effort_label()) # Ensure the reactive value is available
-          paste0("tracker_data_", reporting_effort_label(), "_", Sys.Date(), ".xlsx")
+          paste0("TNF_", reporting_effort_label(), "_", Sys.Date(), ".xlsx")
         },
         content = function(file) {
           df <- tfl_data() %>%

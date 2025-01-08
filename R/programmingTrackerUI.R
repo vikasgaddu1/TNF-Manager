@@ -25,8 +25,24 @@ programmingTrackerUI <- function(id, title = "Programming Tracker") {
       )
     ),
     
-    programmingEffortUI(ns("programming_effort")),
-    tflTrackerUI(ns("tfl_tracker"))
-
+    tabBox(
+      id = ns("programming_tracker_tabs"),
+      width = 12,
+      tabPanel(
+        "TFL Tracker",
+        icon = icon("table"),
+        tflTrackerUI(ns("tfl_tracker"))
+      ),
+      tabPanel(
+        "SDTM Tracker",
+        icon = icon("table"),
+        tflTrackerUI(ns("sdtm_tracker"))
+      ),
+      tabPanel(
+        "ADaM Tracker",
+        icon = icon("table"),
+        tflTrackerUI(ns("adam_tracker"))
+      )
+    )
   )
 }

@@ -139,24 +139,11 @@ createTables <- function(pool) {
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (reporting_effort_id) REFERENCES reporting_efforts (id) ON DELETE CASCADE,
       FOREIGN KEY (report_id) REFERENCES reports (id) ON DELETE CASCADE,
-      UNIQUE (reporting_effort_id, report_id)
+      UNIQUE (reporting_effort_id, report_id,report_type)
   );"
   )
   
-  dbExecute(
-    pool,
-    "CREATE TABLE IF NOT EXISTS reporting_effort_datasets (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      reporting_effort_id INTEGER NOT NULL,
-      dataset_id INTEGER NOT NULL,
-      report_type TEXT NOT NULL,
-      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      FOREIGN KEY (reporting_effort_id) REFERENCES reporting_efforts (id) ON DELETE CASCADE,
-      FOREIGN KEY (dataset_id) REFERENCES datasets (id) ON DELETE CASCADE,
-      UNIQUE (reporting_effort_id, dataset_id)
-  );"
-  )
-  
+
   # Users table
   dbExecute(
     pool,

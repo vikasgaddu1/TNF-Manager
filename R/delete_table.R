@@ -1,4 +1,47 @@
-#  dbPoolCon <- dbPool(RSQLite::SQLite(), dbname = "data/database.sqlite", create = TRUE)
+# dbPoolCon <- dbPool(RSQLite::SQLite(), dbname = "data/database.sqlite", create = TRUE)
+# # Step 1: Create a temporary table with the updated unique constraint
+# dbExecute(
+#   dbPoolCon,
+#   "CREATE TABLE IF NOT EXISTS temp_reporting_effort_reports (
+#     id INTEGER PRIMARY KEY AUTOINCREMENT,
+#     reporting_effort_id INTEGER NOT NULL,
+#     report_id INTEGER NOT NULL,
+#     report_type TEXT NOT NULL,
+#     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+#     FOREIGN KEY (reporting_effort_id) REFERENCES reporting_efforts (id) ON DELETE CASCADE,
+#     FOREIGN KEY (report_id) REFERENCES reports (id) ON DELETE CASCADE,
+#     UNIQUE (reporting_effort_id, report_id, report_type)
+#   );"
+# )
+# 
+# # Step 2: Copy data from the old table to the new temporary table
+# dbExecute(
+#   dbPoolCon,
+#   "INSERT INTO temp_reporting_effort_reports (reporting_effort_id, report_id, report_type, updated_at)
+#    SELECT reporting_effort_id, report_id, report_type, updated_at FROM reporting_effort_reports;"
+# )
+# 
+# # Step 3: Drop the old table
+# dbExecute(dbPoolCon, "DROP TABLE reporting_effort_reports;")
+# 
+# # Step 4: Rename the temporary table to the original name
+# dbExecute(dbPoolCon, "ALTER TABLE temp_reporting_effort_reports RENAME TO reporting_effort_reports;")
+
+ # ds <- dbGetQuery(dbPoolCon, paste(
+ #   "SELECT d.id, 
+ #               d.dataset_name AS 'Dataset Name', 
+ #               d.dataset_label AS 'Dataset Label', 
+ #               d.dataset_type AS 'Dataset Type', 
+ #               d.category_name AS 'Category', 
+ #               CASE WHEN rer.reporting_effort_id IS NOT NULL THEN 1 ELSE 0 END AS Selected
+ #               FROM datasets d
+ #               LEFT JOIN reporting_effort_reports rer 
+ #                   ON d.id = rer.report_id 
+ #                   AND rer.reporting_effort_id = '1' 
+ #   WHERE d.dataset_type = 'SDTM'
+ #   GROUP BY d.id;"
+ # ));
+ # ds
 # dbExecute(dbPoolCon, "
 # DROP TABLE reporting_effort_reports;
 # ")

@@ -21,7 +21,27 @@ associateTask_RE_UI <- function(id, title) {
       )
     ),
     
-    # Main content
-    at_tfl_UI(id = ns("at_tfl"))
+    # Main tabBox containing both TFL Tracker and Dataset Tracker
+    fluidRow(
+      tabBox(
+        id = ns("main_tab_box"),
+        width = 12,
+        tabPanel(
+          "TFL",
+          at_tfl_UI(id = ns("at_tfl")),
+          icon = icon("table")
+        ),
+        tabPanel(
+          "SDTM",
+          at_dataset_UI(id = ns("at_sdtm"),"SDTM"),
+          icon = icon("table")
+        ),
+        tabPanel(
+          "ADaM",
+          at_dataset_UI(id = ns("at_adam"),"ADaM"),
+          icon = icon("table")
+        )
+      )
+    )
   )
 }

@@ -39,7 +39,7 @@ ui <- dashboardPage(
       id = "tabs",
       menuItem("CRUD Menu", tabName = "crud_menu", icon = icon("th"), badgeLabel = "Admin", badgeColor = "red"),
       menuItem(
-        "Reporting Effort Reports",
+        "Associate Task to RE",
         tabName = "re_reports",
         icon = icon("code")
       ),
@@ -76,13 +76,14 @@ ui <- dashboardPage(
             tabPanel("Users", icon = icon("user"), genericCRUDUI("users", "Users")),
             tabPanel("Datasets", icon = icon("database"), genericCRUDUI("datasets", "Datasets")),
             tabPanel("Reports", icon = icon("file-lines"), genericCRUDUI("reports", "Reports")),
-            tabPanel("Reporting Effort", icon = icon("chart-line"), genericCRUDUI("reporting_effort", "Reporting Effort"))
+            tabPanel("Reporting Effort", icon = icon("chart-line"), genericCRUDUI("reporting_effort", "Reporting Effort")),
+            tabPanel("tableSelector", icon = icon("table"), tableSelectorUI("tableSelector"))
           )
         )
       ),
       tabItem(
         "re_reports",
-        associateTask_RE_UI("re_reports", "Reporting Effort Reports")
+        associateTask_RE_UI("re_reports", "Associate Task to Reporting Effort")
       ),
       tabItem("tracker", programmingTrackerUI("tracker")),
       tabItem("faq", FAQModuleUI("faq"))
@@ -105,6 +106,7 @@ server <- function(input, output, session) {
   usersServer("users", dbPoolCon)
   associateTask_RE_Server("re_reports", dbPoolCon, tabs_input = reactive(input$tabs))
   programmingTrackerServer("tracker", dbPoolCon, tabs_input = reactive(input$tabs))
+  tableSelectorServer("tableSelector", dbPoolCon)
   
   # Disconnect pool when session ends
   onStop(function() {

@@ -467,7 +467,7 @@ reportCRUDServer <- function(id, pool, tabs_input) {
       selected_row <- input$table_rows_selected
       if (length(selected_row) > 0) {
         report_data <- data()[selected_row, ]
-        print(report_data$footnotes)
+        #print(report_data$footnotes)
         
         selected_footnotes <- if (!is.null(report_data$footnotes) && is.character(report_data$footnotes)) {
           trimws(unlist(strsplit(report_data$footnotes, "@#")))

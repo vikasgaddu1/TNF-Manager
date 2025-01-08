@@ -1,4 +1,4 @@
-programmingEffortServer <- function(id, tracker_data) {
+programmingEffortServer <- function(id, tracker_data, hidden_cols) {
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
     status_colors <- c(
@@ -68,26 +68,22 @@ programmingEffortServer <- function(id, tracker_data) {
     
     # Filter data for tasks due in 3 days (excluding QC Pass)
     output$dueSoon <- renderDT({
+      # Filter data for "due soon" logic
       due_soon <- data() %>%
         mutate(due_date = as.Date(due_date)) %>%
         filter(due_date <= Sys.Date() + 3 & due_date >= Sys.Date() & status != "QC Pass") %>%
-        select(
-          Report_Key = report_key, 
-          Production_Programmer = production_programmer, 
-          QC_Programmer = qc_programmer, 
-          Assign_Date = assign_date, 
-          Due_Date = due_date, 
-          Priority = priority,
-          Status = status
+        select(-any_of(hidden_cols())) # Exclude hidden columns
+      
+      # Render DataTable with conditional formatting for status column
+      datatable(due_soon) %>%
+        DT::formatStyle(
+          "status",
+          target = "row",
+          backgroundColor = DT::styleEqual(
+            names(status_colors),
+            as.vector(status_colors)
+          )
         )
-      br()
-      datatable(due_soon) %>% 
-        DT::formatStyle("Status",
-                        target = "row",
-                        backgroundColor = DT::styleEqual(
-                          names(status_colors),
-                          as.vector(status_colors)
-                        ))
     })
     
     # Filter data for past due tasks (excluding QC Pass)
@@ -95,17 +91,10 @@ programmingEffortServer <- function(id, tracker_data) {
       past_due <- data() %>%
         mutate(due_date = as.Date(due_date)) %>%
         filter(due_date < Sys.Date() & status != "QC Pass") %>%
-        select(
-          Report_Key = report_key, 
-          Production_Programmer = production_programmer, 
-          QC_Programmer = qc_programmer, 
-          Assign_Date = assign_date, 
-          Due_Date = due_date, 
-          Priority = priority,
-          Status = status
-        )
+        select(-any_of(hidden_cols())) # Exclude hidden columns
+      
       datatable(past_due) %>% 
-        DT::formatStyle("Status",
+        DT::formatStyle("status",
                         target = "row",
                         backgroundColor = DT::styleEqual(
                           names(status_colors),
