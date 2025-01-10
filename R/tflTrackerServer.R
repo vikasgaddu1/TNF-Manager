@@ -211,12 +211,12 @@ DT::datatable(
       selected_row <- input$tracker_table_rows_selected
       
       if (length(selected_row) == 0) {
-        showModal(modalDialog(
+        show_toast(
           title = "Edit Report Programming Details",
-          "Please select a row before editing.",
-          easyClose = TRUE,
-          footer = NULL
-        ))
+          type = "info",
+          text = "Please select a row before editing.",
+          position = "center"
+        )
         return()
       }
       

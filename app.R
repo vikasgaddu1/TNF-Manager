@@ -1,6 +1,7 @@
 
 library(shiny)
 library(shinydashboard)
+library(shinydashboardPlus)
 library(shinyFeedback)
 library(shinyjs)
 library(shinyWidgets)
@@ -20,7 +21,6 @@ library(openxlsx)
 library(plotly)
 library(gtsummary)
 library(gt)
-library(dashboardthemes)
 library(bslib)
 library(jsonlite)
 
@@ -92,10 +92,12 @@ ui <- dashboardPage(
       # Add more tabItems for other tables
     )
   ),
-  skin = "black"
+  freshTheme = TRUE,
+  skin = "black-light"
 )
 
 server <- function(input, output, session) {
+
 
   tables <- dbListTables(dbPoolCon)
   tables <- tables[tables != "sqlite_sequence"]
