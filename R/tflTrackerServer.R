@@ -1,121 +1,53 @@
-
-
-tflTrackerServer <- function(id, pool, reporting_effort,refresh_trigger,reporting_effort_label) {
+tflTrackerServer <- function(id, pool, reporting_effort,tables_data,reporting_effort_label) {
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
-
     tracker_data <- reactive({
-      req(reporting_effort())
-      refresh_trigger()
+      req(reporting_effort(), tables_data)
       
-      query <- sprintf(
-        "
-          SELECT
-            rpt.id,
-            re.study,
-            re.database_release,
-            re.reporting_effort,
-            r.report_key,
-            r.report_type,
-            r.title_key,
-            c.category_name AS category,
-            sc.sub_category_name AS subcategory,
-            r.report_ich_number AS ich_number,
-            p.population_text AS population,
-            (SELECT GROUP_CONCAT(t2.title_text, '@#')
-             FROM report_titles rt2 
-             JOIN titles t2 ON rt2.title_id = t2.id 
-             WHERE rt2.report_id = r.id) AS titles,
-            (SELECT GROUP_CONCAT(f2.footnote_text, '@#')
-             FROM report_footnotes rf2 
-             JOIN footnotes f2 ON rf2.footnote_id = f2.id 
-             WHERE rf2.report_id = r.id) AS footnotes,
-            prod.username AS production_programmer,
-            qc.username AS qc_programmer,
-            rpt.assign_date,
-            rpt.due_date,
-            rpt.priority,
-            rpt.status
-          FROM report_programming_tracker rpt
-          INNER JOIN reporting_efforts re
-            ON rpt.reporting_effort_id = re.id
-          INNER JOIN reports r
-            ON rpt.report_id = r.id
-          LEFT JOIN reporting_effort_reports rer
-            ON rer.reporting_effort_id = re.id
-            AND rer.report_id = r.id
-          LEFT JOIN categories c
-            ON r.report_category_id = c.id
-          LEFT JOIN sub_categories sc
-            ON r.report_sub_category_id = sc.id
-          LEFT JOIN populations p
-            ON r.population_id = p.id
-          LEFT JOIN users prod
-            ON rpt.production_programmer_id = prod.id
-          LEFT JOIN users qc
-            ON rpt.qc_programmer_id = qc.id
-          WHERE rpt.reporting_effort_id = %d 
-          AND rpt.report_type in ('Table','Listing','Figure')
-          GROUP BY
-            rpt.id,
-            re.study,
-            re.database_release,
-            re.reporting_effort,
-            r.report_key,
-            r.report_type,
-            r.title_key,
-            c.category_name,
-            sc.sub_category_name,
-            r.report_ich_number,
-            p.population_text,
-            prod.username,
-            qc.username,
-            rpt.assign_date,
-            rpt.due_date,
-            rpt.priority,
-            rpt.status
-ORDER BY rpt.priority DESC, rpt.assign_date DESC;  ",
-        as.integer(reporting_effort())
-      )
-      
-      
-      data <- tryCatch({
-        dbGetQuery(pool, query)
-      }, error = function(e) {
-        showNotification(paste("Error loading tracker data:", e$message), type = "error")
-        NULL
-      })
-      
-      if (!is.null(data)) {
-        data$priority <- as.integer(data$priority)  # Convert priority to integer
-      }
-      
-      data
+      # Use dplyr to merge tables
+      data <- tables_data$report_programming_tracker() %>%
+              dplyr::filter(reporting_effort_id == reporting_effort() & report_type  %in% c('Table', 'Listing', 'Figure')) %>%
+              dplyr::inner_join(tables_data$reporting_efforts(), join_by(reporting_effort_id == id)) %>%
+              dplyr::inner_join(tables_data$reports(), join_by(report_id == id, report_type == report_type)) %>%
+              dplyr::left_join(tables_data$categories(), join_by(report_category_id == id)) %>%
+              dplyr::left_join(tables_data$sub_categories(), join_by(report_sub_category_id == id)) %>%
+              dplyr::left_join(tables_data$populations(), join_by(population_id == id)) %>%
+              dplyr::left_join(tables_data$users() %>% dplyr::rename(production_programmer = username), join_by(production_programmer_id == id)) %>%
+              dplyr::left_join(tables_data$users() %>% dplyr::rename(qc_programmer = username), join_by(qc_programmer_id == id)) %>%
+              dplyr::mutate(
+                titles = purrr::map_chr(id, ~ {
+                  tables_data$report_titles() %>%
+                    dplyr::filter(report_id == .x) %>%
+                    dplyr::inner_join(tables_data$titles(), join_by(title_id == id)) %>%
+                    dplyr::pull(title_text) %>%
+                    paste(collapse = "@#")
+                }),
+                footnotes = purrr::map_chr(id, ~ {
+                  tables_data$report_footnotes() %>%
+                    dplyr::filter(report_id == .x) %>%
+                    dplyr::inner_join(tables_data$footnotes(), join_by(footnote_id == id)) %>%
+                    dplyr::pull(footnote_text) %>%
+                    paste(collapse = "@#")
+                })
+              ) %>%
+              dplyr::filter(report_type %in% c('Table', 'Listing', 'Figure')) %>%
+              dplyr::arrange(desc(priority), desc(assign_date)) %>% 
+              dplyr::select(-dplyr::starts_with("updated_at"))
+
+
+
     })
     
     programmingEffortServer("programming_effort", tracker_data, reactive(input$column_selection))
 
-    
     production_programmers <- reactive({
-      tryCatch({
-        refresh_trigger()
-        dbGetQuery(pool, "SELECT id, username FROM users;")
-      }, error = function(e) {
-        showNotification(paste("Error loading production programmers:", e$message),
-                         type = "error")
-        NULL
-      })
+      tables_data$users() %>%
+        dplyr::select(id, username)
     })
     
     qc_programmers <- reactive({
-      tryCatch({
-        refresh_trigger()
-        dbGetQuery(pool, "SELECT id, username FROM users;")
-      }, error = function(e) {
-        showNotification(paste("Error loading QC programmers:", e$message),
-                         type = "error")
-        NULL
-      })
+      tables_data$users() %>%
+        dplyr::select(id, username)
     })
     
     
@@ -128,13 +60,21 @@ ORDER BY rpt.priority DESC, rpt.assign_date DESC;  ",
         choices = col_names,
         selected = c(
           "id",
+          "reporting_effort_id", 
+          "report_id",
+          "production_programmer_id",
+          "qc_programmer_id",
           "study",
           "database_release",
           "reporting_effort",
-          "category",
-          "subcategory",
-          "ich_number",
-          "footnotes"
+          "report_category_id",
+          "report_sub_category_id",
+          "population_id",
+          "category_id",
+          "suggested_ich_number",
+          "role.x",
+          "role.y",
+          "footnotes" 
         ) # Default hidden column
       )
     })
@@ -149,7 +89,12 @@ ORDER BY rpt.priority DESC, rpt.assign_date DESC;  ",
         
         # Check if data is available
         if (is.null(df) || nrow(df) == 0) {
-          showNotification("No data available to download.", type = "warning")
+          showModal(modalDialog(
+            title = "Warning",
+            "No data available to download.",
+            easyClose = TRUE,
+            footer = NULL
+          ))
           return(NULL)
         }
         
@@ -158,13 +103,44 @@ ORDER BY rpt.priority DESC, rpt.assign_date DESC;  ",
       }
     )
     
-    
-    
-    
-    
+   
     output$tracker_table <- renderDT({
       req(tracker_data())
-      df <- tracker_data()
+      df <- tracker_data() %>% 
+        dplyr::select(
+          report_type,
+          category_name,
+          sub_category_name,
+          report_key,
+          title_key,
+          titles,
+          report_ich_number,
+          population_text,
+          production_programmer,
+          assign_date,
+          qc_programmer,
+          due_date,
+          priority,
+          status,
+          id,
+          reporting_effort_id, 
+          report_id,
+          production_programmer_id,
+          qc_programmer_id,
+          study,
+          database_release,
+          reporting_effort,
+          report_category_id,
+          report_sub_category_id,
+          population_id,
+          category_id,
+          suggested_ich_number,
+          role.x,
+          role.y,
+          footnotes
+        )
+
+
       
       # If df is empty, return a notification or a placeholder
       if (is.null(df) || nrow(df) == 0) {
@@ -178,38 +154,32 @@ ORDER BY rpt.priority DESC, rpt.assign_date DESC;  ",
              visible = !(colnames(df)[i] %in% hidden_cols))
       })
       
-      DT::datatable(
-        df,
-        selection = "single",
-        rownames = FALSE,
-        filter = "top",
-        options = list(
-          pageLength = 10,
-          autoWidth = TRUE,
-          columnDefs = col_defs
-        ),
-        colnames = c(
-          "id" = "id",
-          "Study" = "study",
-          "Database Release" = "database_release",
-          "Reporting Effort" = "reporting_effort",
-          "Report Key" = "report_key",
-          "Report Type" = "report_type",
-          "Title Key" = "title_key",
-          "Category" = "category",
-          "Subcategory" = "subcategory",
-          "ICH Number" = "ich_number",
-          "Population" = "population",
-          "Titles" = "titles",
-          "Footnotes" = "footnotes",
-          "Production Programmer" = "production_programmer",
-          "QC Programmer" = "qc_programmer",
-          "Assign Date" = "assign_date",
-          "Due Date" = "due_date",
-          "Priority" = "priority",
-          "Status" = "status"
-        )
-      ) %>%
+DT::datatable(
+  df,
+  selection = "single",
+  rownames = FALSE,
+  filter = "top",
+  options = list(
+    pageLength = 10,
+    autoWidth = TRUE,
+    columnDefs = col_defs
+  ),
+  colnames = c(
+    "Report Type" = "report_type",
+    "Category" = "category_name",
+    "Subcategory" = "sub_category_name",
+    "Report Key" = "report_key",
+    "Title Key" = "title_key",
+    "Titles" = "titles",
+    "ICH Number" = "report_ich_number",
+    "Population" = "population_text",
+    "Production Programmer" = "production_programmer",
+    "Assign Date" = "assign_date",
+    "QC Programmer" = "qc_programmer",
+    "Due Date" = "due_date",
+    "Priority" = "priority",
+    "Status" = "status"
+  )) %>%
         DT::formatDate("Assign Date", method = "toLocaleDateString") %>%
         DT::formatDate("Due Date", method = "toLocaleDateString") %>%
         DT::formatStyle("Status",
@@ -241,7 +211,12 @@ ORDER BY rpt.priority DESC, rpt.assign_date DESC;  ",
       selected_row <- input$tracker_table_rows_selected
       
       if (length(selected_row) == 0) {
-        showNotification("Please select a row before editing.", type = "warning")
+        showModal(modalDialog(
+          title = "Edit Report Programming Details",
+          "Please select a row before editing.",
+          easyClose = TRUE,
+          footer = NULL
+        ))
         return()
       }
       
@@ -249,22 +224,26 @@ ORDER BY rpt.priority DESC, rpt.assign_date DESC;  ",
       if (length(selected_row) > 0) {
         df <- tracker_data()
         row_data <- df[selected_row, ]
-        # print(paste("Selected row:", selected_row))
-        # print(paste("Row data:", toString(row_data)))
         selected_id(row_data$id)
-        # print(paste("Set selected_id to:", selected_id()))
       }
       
       if (is.null(df) || nrow(df) < selected_row) {
-        showNotification("Invalid selection. Please refresh and try again.", type = "error")
+        showModal(modalDialog(
+          title = "Edit Report Programming Details",
+          "Invalid selection. Please refresh and try again.",
+          easyClose = TRUE,
+          footer = NULL
+        ))
         return()
       }
       
-      
-      
       if (is.null(selected_id())) {
-        showNotification("Could not capture the selected ID. Please refresh and try again.",
-                         type = "error")
+        showModal(modalDialog(
+          title = "Edit Report Programming Details",
+          "Could not capture the selected ID. Please refresh and try again.",
+          easyClose = TRUE,
+          footer = NULL
+        ))
         return()
       }
       
@@ -324,13 +303,11 @@ ORDER BY rpt.priority DESC, rpt.assign_date DESC;  ",
             dateInput(
               ns("assign_date"),
               "Assign Date:",
-              value = ifelse(
-                is.na(row_data$assign_date),
-                Sys.Date(),
-                as.Date(row_data$assign_date)
-              ),
-              format = "yyyy-mm-dd"
-            ),
+              value = if(is.na(row_data$assign_date)) {
+                Sys.Date()
+              } else {
+                as.Date(row_data$assign_date, format = "%Y-%m-%d")
+              }),
             selectInput(
               ns("status"),
               "Status:",
@@ -356,14 +333,12 @@ ORDER BY rpt.priority DESC, rpt.assign_date DESC;  ",
             dateInput(
               ns("due_date"),
               "Due Date:",
-              value = ifelse(
-                is.na(row_data$due_date),
-                Sys.Date() + 7,
-                as.Date(row_data$due_date)
-              ),
-              format = "yyyy-mm-dd"
-            ),
-            
+              value = if(is.na(row_data$due_date)) {
+                Sys.Date() + 7
+              } else {
+                as.Date(row_data$due_date, format = "%Y-%m-%d")
+              }
+            ),  
             selectInput(
               ns("priority"),
               "Priority (1 <- Highest 5 <- Lowest):",
@@ -379,13 +354,17 @@ ORDER BY rpt.priority DESC, rpt.assign_date DESC;  ",
         )
       )
       
-      
       showModal(edit_modal)
     })
     
     observeEvent(input$save_changes, {
       if (is.null(selected_id())) {
-        showNotification("No valid ID selected for update. Please try again.", type = "error")
+        showModal(modalDialog(
+          title = "Error",
+          "No valid ID selected for update. Please try again.",
+          easyClose = TRUE,
+          footer = NULL
+        ))
         return()
       }
       
@@ -398,60 +377,87 @@ ORDER BY rpt.priority DESC, rpt.assign_date DESC;  ",
       
       # Validation Checks
       if (!priority %in% 1:5) {
-        showNotification("Priority must be between 1 (Highest) and 5 (Lowest).",
-                         type = "error")
+        showModal(modalDialog(
+          title = "Error",
+          "Priority must be between 1 (Highest) and 5 (Lowest).",
+          easyClose = TRUE,
+          footer = NULL
+        ))
         return()
       }
       
       if (prod_id == qc_id) {
-        showNotification("Production and QC programmer cannot be the same person.",
-                         type = "warning")
+        showModal(modalDialog(
+          title = "Warning",
+          "Production and QC programmer cannot be the same person.",
+          easyClose = TRUE,
+          footer = NULL
+        ))
         return()
       }
       
       if (due_date <= assign_date) {
-        showNotification("Due date must be after the assign date.", type = "warning")
+        showModal(modalDialog(
+          title = "Warning",
+          "Due date must be after the assign date.",
+          easyClose = TRUE,
+          footer = NULL
+        ))
         return()
       }
       
       if (!selected_id() %in% tracker_data()$id) {
-        showNotification("Invalid selection. Please refresh and try again.", type = "error")
+        showModal(modalDialog(
+          title = "Error",
+          "Invalid selection. Please refresh and try again.",
+          easyClose = TRUE,
+          footer = NULL
+        ))
         return()
       }
       
       cat("Selected ID:", selected_id(), "\n")
       tryCatch({
-        dbExecute(
-          pool,
-          "UPDATE report_programming_tracker
-       SET production_programmer_id = ?,
-           assign_date = ?,
-           qc_programmer_id = ?,
-           due_date = ?,
-           priority = ?,
-           status = ?
-       WHERE id = ? ;",
-          params = list(
-            prod_id,
-            as.character(assign_date),
-            qc_id,
-            as.character(due_date),
-            as.integer(priority),
-            status,
-            selected_id()
+        poolWithTransaction(pool, function(conn) {
+          dbExecute(
+            conn,
+            "UPDATE report_programming_tracker
+         SET production_programmer_id = ?,
+             assign_date = ?,
+             qc_programmer_id = ?,
+             due_date = ?,
+             priority = ?,
+             status = ?
+         WHERE id = ? ;",
+            params = list(
+              prod_id,
+              as.character(assign_date),
+              qc_id,
+              as.character(due_date),
+              as.integer(priority),
+              status,
+              selected_id()
+            )
           )
-        )
+        })
         
-        showNotification("Record updated successfully.", type = "message")
+        showModal(modalDialog(
+          title = "Success",
+          "Record updated successfully.",
+          easyClose = TRUE,
+          footer = NULL
+        ))
         removeModal()
         
-        # Trigger a refresh of the tracker data
-        refresh_trigger(refresh_trigger() + 1)
       }, error = function(e) {
-        showNotification(paste("Error updating record:", e$message), type = "error")
+        showModal(modalDialog(
+          title = "Error",
+          paste("Error updating record:", e$message),
+          easyClose = TRUE,
+          footer = NULL
+        ))
       })
     })
     
   })
-  return(refresh_trigger)
 }

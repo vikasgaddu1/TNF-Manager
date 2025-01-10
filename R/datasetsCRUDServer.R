@@ -1,14 +1,14 @@
-datasetsCRUDServer <- function(id, pool) {
+datasetsCRUDServer <- function(id, pool, tables_data) {
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
     
+    # Create reactive for datasets table
+    data <- reactive({
+      tables_data$datasets()
+    })
+    
     # Trigger to refresh data
     refresh_trigger <- reactiveVal(0)
-    
-    data <- reactive({
-      refresh_trigger()  # Add dependency on refresh trigger
-      dbReadTable(pool, "datasets")  # Read from dataset table
-    })
     
     get_categories <- function(dataset_type) {
       if (dataset_type == "SDTM") {
@@ -61,6 +61,15 @@ datasetsCRUDServer <- function(id, pool) {
       ))
     })
     
+    # Clear feedback when input changes
+    observeEvent(input$dataset_name, {
+      shinyFeedback::hideFeedback("dataset_name")
+    })
+    
+    observeEvent(input$dataset_label, {
+      shinyFeedback::hideFeedback("dataset_label")
+    })
+    
     output$category_select <- renderUI({
       req(input$dataset_type)
       selectInput(
@@ -72,34 +81,56 @@ datasetsCRUDServer <- function(id, pool) {
     })
     
     observeEvent(input$confirm_add, {
-      req(input$dataset_type, input$category_name, input$dataset_name, input$dataset_label)
+      # Validate required fields
+      if (is.null(input$dataset_type) || 
+          is.null(input$category_name) || 
+          is.null(input$dataset_name) || 
+          input$dataset_name == "" ||
+          is.null(input$dataset_label) || 
+          input$dataset_label == "") {
+        
+        shinyFeedback::feedbackDanger(
+          "dataset_name",
+          is.null(input$dataset_name) || input$dataset_name == "",
+          "Dataset name is required."
+        )
+        shinyFeedback::feedbackDanger(
+          "dataset_label",
+          is.null(input$dataset_label) || input$dataset_label == "",
+          "Dataset label is required."
+        )
+        return()
+      }
       
       tryCatch({
-        new_dataset <- data.frame(
-          dataset_type = input$dataset_type,
-          category_name = input$category_name,
-          dataset_name = input$dataset_name,
-          dataset_label = input$dataset_label,
-          stringsAsFactors = FALSE
+        poolWithTransaction(pool, function(conn) {
+          dbExecute(
+            conn,
+            "INSERT INTO datasets (dataset_type, category_name, dataset_name, dataset_label) 
+             VALUES (?, ?, ?, ?)",
+            params = list(
+              input$dataset_type,
+              input$category_name,
+              input$dataset_name,
+              input$dataset_label
+            )
+          )
+        })
+        
+        show_toast(
+          title = "Add Dataset",
+          type = "success",
+          text = "Dataset added successfully!",
+          position = "top-end"
         )
-        dbWriteTable(pool,
-                     "datasets",
-                     new_dataset,
-                     append = TRUE,
-                     row.names = FALSE)
-        
-        showNotification("Dataset added successfully!",
-                         type = "message",
-                         duration = 3)
-        
-        refresh_trigger(refresh_trigger() + 1)
         
         removeModal()
       }, error = function(e) {
-        showNotification(
-          paste("Error adding dataset:", e$message),
+        show_toast(
+          title = "Add Dataset",
           type = "error",
-          duration = 5
+          text = paste("Error adding dataset:", e$message),
+          position = "top-end"
         )
       })
     })
@@ -109,11 +140,11 @@ datasetsCRUDServer <- function(id, pool) {
       selected <- input$table_rows_selected
       
       if (length(selected) == 0) {
-        showNotification(
-          "Please select a dataset to edit",
+        show_toast(
+          title = "Edit Dataset",
           type = "warning",
-          duration = 3,
-          closeButton = TRUE
+          text = "Please select a dataset to edit",
+          position = "center"
         )
         return()
       }
@@ -121,7 +152,11 @@ datasetsCRUDServer <- function(id, pool) {
       dataset <- data()[selected, ]
       
       showModal(modalDialog(
-        title = div(icon("edit"), "Edit Dataset"),
+        title = div(
+          class = "d-flex align-items-center",
+          icon("edit", class = "text-warning me-2"),
+          "Edit Dataset"
+        ),
         div(
           class = "form-group",
           selectInput(
@@ -170,28 +205,63 @@ datasetsCRUDServer <- function(id, pool) {
     })
     
     observeEvent(input$confirm_edit, {
-      req(input$dataset_type, input$category_name, input$dataset_name, input$dataset_label)
-      selected <- input$table_rows_selected
+      # Validate required fields
+      if (is.null(input$dataset_type) || 
+          is.null(input$category_name) || 
+          is.null(input$dataset_name) || 
+          input$dataset_name == "" ||
+          is.null(input$dataset_label) || 
+          input$dataset_label == "") {
+        
+        shinyFeedback::feedbackDanger(
+          "dataset_name",
+          is.null(input$dataset_name) || input$dataset_name == "",
+          "Dataset name is required."
+        )
+        shinyFeedback::feedbackDanger(
+          "dataset_label",
+          is.null(input$dataset_label) || input$dataset_label == "",
+          "Dataset label is required."
+        )
+        return()
+      }
       
       tryCatch({
-        dbExecute(
-          pool,
-          "UPDATE datasets SET dataset_type = ?, category_name = ?, dataset_name = ?, dataset_label = ? WHERE id = ?",
-          params = list(input$dataset_type, input$category_name, input$dataset_name, input$dataset_label, data()[selected, "id"])
+        selected <- input$table_rows_selected
+        
+        poolWithTransaction(pool, function(conn) {
+          dbExecute(
+            conn,
+            "UPDATE datasets 
+             SET dataset_type = ?, 
+                 category_name = ?, 
+                 dataset_name = ?, 
+                 dataset_label = ? 
+             WHERE id = ?",
+            params = list(
+              input$dataset_type,
+              input$category_name,
+              input$dataset_name,
+              input$dataset_label,
+              data()[selected, "id"]
+            )
+          )
+        })
+        
+        show_toast(
+          title = "Edit Dataset",
+          type = "success",
+          text = "Dataset updated successfully!",
+          position = "top-end"
         )
-        
-        showNotification("Dataset updated successfully!",
-                         type = "message",
-                         duration = 3)
-        
-        refresh_trigger(refresh_trigger() + 1)
         
         removeModal()
       }, error = function(e) {
-        showNotification(
-          paste("Error updating dataset:", e$message),
+        show_toast(
+          title = "Edit Dataset",
           type = "error",
-          duration = 5
+          text = paste("Error updating dataset:", e$message),
+          position = "top-end"
         )
       })
     })
@@ -201,11 +271,11 @@ datasetsCRUDServer <- function(id, pool) {
       selected <- input$table_rows_selected
       
       if (length(selected) == 0) {
-        showNotification(
-          "Please select a dataset to delete",
+        show_toast(
+          title = "Delete Dataset",
           type = "warning",
-          duration = 3,
-          closeButton = TRUE
+          text = "Please select a dataset to delete",
+          position = "center"
         )
         return()
       }
@@ -213,10 +283,14 @@ datasetsCRUDServer <- function(id, pool) {
       dataset <- data()[selected, ]
       
       showModal(modalDialog(
-        title = div(icon("trash"), "Delete Dataset"),
+        title = div(
+          class = "d-flex align-items-center",
+          icon("trash-alt", class = "text-danger me-2"),
+          "Delete Dataset"
+        ),
         div(
           class = "alert alert-danger",
-          icon("exclamation-triangle"),
+          icon("exclamation-triangle", class = "me-2"),
           "This action cannot be undone!"
         ),
         div(
@@ -231,7 +305,7 @@ datasetsCRUDServer <- function(id, pool) {
             ns("confirm_delete"),
             "Delete Dataset",
             class = "btn btn-danger",
-            icon = icon("trash")
+            icon = icon("trash-alt")
           )
         ),
         size = "m",
@@ -245,34 +319,32 @@ datasetsCRUDServer <- function(id, pool) {
       dataset_id <- data()[selected, "id"]
       
       tryCatch({
-        dbExecute(
-          pool, 
-          "DELETE FROM datasets WHERE id = ?", 
-          params = list(dataset_id)
-        )
+        poolWithTransaction(pool, function(conn) {
+          dbExecute(
+            conn,
+            "DELETE FROM datasets WHERE id = ?",
+            params = list(dataset_id)
+          )
+        })
         
-        showNotification(
-          "Dataset deleted successfully!",
-          type = "message",
-          duration = 3
+        show_toast(
+          title = "Delete Dataset",
+          type = "success",
+          text = "Dataset deleted successfully!",
+          position = "top-end"
         )
-        
-        refresh_trigger(refresh_trigger() + 1)
         
         removeModal()
       }, error = function(e) {
-        showNotification(
-          paste("Error deleting dataset:", e$message),
+        show_toast(
+          title = "Delete Dataset",
           type = "error",
-          duration = 5
+          text = paste("Error deleting dataset:", e$message),
+          position = "top-end"
         )
       })
     })
     
-    # Refresh Data
-    observeEvent(input$refresh, {
-      refresh_trigger(refresh_trigger() + 1)
-    })
     
     output$table <- DT::renderDataTable({
       DT::datatable(
@@ -283,8 +355,8 @@ datasetsCRUDServer <- function(id, pool) {
           "Dataset Type" = "dataset_type", 
           "Category Name" = "category_name",
           "Dataset Name" = "dataset_name",
-          "Dataset Label" = "dataset_label",
-          "Last Updated" = "updated_at"
+          "Dataset Label" = "dataset_label"
+    
         ),
         selection = "single",
         rownames = FALSE,
@@ -292,7 +364,7 @@ datasetsCRUDServer <- function(id, pool) {
         options = list(
           columnDefs = list(
             list(
-              targets = c(0),  # Hide ID column
+              targets = c(0,5),  # Hide ID column
               visible = FALSE
             )
           )

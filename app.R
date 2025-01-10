@@ -1,6 +1,7 @@
 
 library(shiny)
 library(shinydashboard)
+library(shinyFeedback)
 library(shinyjs)
 library(shinyWidgets)
 library(shinyalert)
@@ -21,7 +22,7 @@ library(gtsummary)
 library(gt)
 library(dashboardthemes)
 library(bslib)
-
+library(jsonlite)
 
 # Create a pool of connections to the database using RSQLite
 dbPoolCon <- dbPool(RSQLite::SQLite(), dbname = "data/database.sqlite", create = TRUE)
@@ -33,7 +34,7 @@ createTables(dbPoolCon)
 
 
 ui <- dashboardPage(
-  dashboardHeader(title = "Geron App v0.2"),
+  dashboardHeader(title = "Geron App v0.3"),
   dashboardSidebar(
     sidebarMenu(
       id = "tabs",
@@ -57,6 +58,7 @@ ui <- dashboardPage(
     )
   ),
   dashboardBody( 
+    shinyFeedback::useShinyFeedback(), 
     tags$head(
       # Add the favicon here
       tags$link(rel = "icon", type = "image/x-icon", href = "image/favicon.ico")
@@ -94,19 +96,26 @@ ui <- dashboardPage(
 )
 
 server <- function(input, output, session) {
-  # Move server logic for CRUD operations
-  singleColumnCRUDServer("categories", dbPoolCon, "categories", "category_name")
-  subCategoriesCRUDServer("sub_categories", dbPoolCon, tabs_input = reactive(input$crud_tabs))
-  singleColumnCRUDServer("titles", dbPoolCon, "titles", "title_text")
-  singleColumnCRUDServer("footnotes", dbPoolCon, "footnotes", "footnote_text")
-  singleColumnCRUDServer("populations", dbPoolCon, "populations", "population_text")
-  datasetsCRUDServer("datasets", dbPoolCon)
-  reportCRUDServer("reports", dbPoolCon, tabs_input = reactive(input$tabs))
-  reportingEffortsServer("reporting_effort", dbPoolCon)
-  usersServer("users", dbPoolCon)
-  associateTask_RE_Server("re_reports", dbPoolCon, tabs_input = reactive(input$tabs))
-  programmingTrackerServer("tracker", dbPoolCon, tabs_input = reactive(input$tabs))
-  tableSelectorServer("tableSelector", dbPoolCon)
+
+  tables <- dbListTables(dbPoolCon)
+  tables <- tables[tables != "sqlite_sequence"]
+  
+  # Initialize the reactive tables data
+  tables_data <- pollAllTables(dbPoolCon, tables)
+  
+  # Use reactive values in modules
+  singleColumnCRUDServer("categories", dbPoolCon, "categories", "category_name", tables_data = tables_data)
+  subCategoriesCRUDServer("sub_categories", dbPoolCon, tabs_input = reactive(input$crud_tabs), tables_data = tables_data)
+  singleColumnCRUDServer("titles", dbPoolCon, "titles", "title_text", tables_data = tables_data)
+  singleColumnCRUDServer("footnotes", dbPoolCon, "footnotes", "footnote_text", tables_data = tables_data)
+  singleColumnCRUDServer("populations", dbPoolCon, "populations", "population_text", tables_data = tables_data)
+  datasetsCRUDServer("datasets", dbPoolCon, tables_data = tables_data)
+  reportCRUDServer("reports", dbPoolCon, tables_data = tables_data)
+  reportingEffortsServer("reporting_effort", dbPoolCon, tables_data = tables_data)
+  usersServer("users", dbPoolCon, tables_data = tables_data)
+  associateTask_RE_Server("re_reports", dbPoolCon, tables_data = tables_data)
+  programmingTrackerServer("tracker", dbPoolCon, tables_data = tables_data)
+  tableSelectorServer("tableSelector", tables_data = tables_data, table_names = tables)
   
   # Disconnect pool when session ends
   onStop(function() {

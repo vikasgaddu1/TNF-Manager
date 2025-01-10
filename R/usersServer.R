@@ -1,13 +1,10 @@
-usersServer <- function(id, pool) {
+usersServer <- function(id, pool, tables_data) {
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
     
-    # Trigger to refresh data
-    refresh_trigger <- reactiveVal(0)
-    
+    # Use tables_data for automatic updates
     data <- reactive({
-      refresh_trigger()
-      dbReadTable(pool, "users")
+      tables_data$users()
     })
     
     # Add User
@@ -32,22 +29,37 @@ usersServer <- function(id, pool) {
     })
     
     observeEvent(input$confirm_add, {
-      req(input$username_input, input$role_input)
+      if (is.null(input$username_input) || input$username_input == "" || 
+          is.null(input$role_input) || input$role_input == "") {
+        shinyFeedback::feedbackDanger("username_input", is.null(input$username_input) || input$username_input == "", "Username is required")
+        shinyFeedback::feedbackDanger("role_input", is.null(input$role_input) || input$role_input == "", "Role is required")
+        return()
+      }
       
       tryCatch({
-        new_record <- data.frame(
-          username = input$username_input,
-          role = input$role_input,
-          stringsAsFactors = FALSE
+        poolWithTransaction(pool, function(conn) {
+          dbExecute(
+            conn,
+            "INSERT INTO users (username, role) VALUES (?, ?)",
+            params = list(input$username_input, input$role_input)
+          )
+        })
+        
+        show_toast(
+          title = "User Added",
+          type = "success",
+          text = "User added successfully!",
+          position = "top-end"
         )
         
-        dbWriteTable(pool, "users", new_record, append = TRUE, row.names = FALSE)
-        
-        showNotification("User added successfully!", type = "message", duration = 3)
-        refresh_trigger(refresh_trigger() + 1)
         removeModal()
       }, error = function(e) {
-        showNotification(paste("Error adding user:", e$message), type = "error", duration = 5)
+        show_toast(
+          title = "Error",
+          type = "error",
+          text = paste("Error adding user:", e$message),
+          position = "top-end"
+        )
       })
     })
     
@@ -55,7 +67,12 @@ usersServer <- function(id, pool) {
     observeEvent(input$edit, {
       selected <- input$table_rows_selected
       if (length(selected) == 0) {
-        showNotification("Please select a user to edit.", type = "warning")
+        show_toast(
+          title = "Edit Error",
+          type = "warning",
+          text = "Please select a user to edit.",
+          position = "center"
+        )
         return()
       }
       
@@ -68,7 +85,7 @@ usersServer <- function(id, pool) {
           selectInput(
             ns("role_input"),
             "Role",
-            choices = c("admin", "user", "production_programmer", "qc_programmer"),
+            choices = c("admin", "user"),
             selected = record$role
           )
         ),
@@ -81,19 +98,38 @@ usersServer <- function(id, pool) {
     })
     
     observeEvent(input$confirm_edit, {
-      req(input$username_input, input$role_input)
+      if (is.null(input$username_input) || input$username_input == "" || is.null(input$role_input) || input$role_input == "") {
+        shinyFeedback::feedbackDanger("username_input", is.null(input$username_input) || input$username_input == "", "Username is required")
+        shinyFeedback::feedbackDanger("role_input", is.null(input$role_input) || input$role_input == "", "Role is required")
+        return()
+      }
       selected <- input$table_rows_selected
       record_id <- data()[selected, "id"]
       
       tryCatch({
-        query <- "UPDATE users SET username = ?, role = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?"
-        dbExecute(pool, query, params = list(input$username_input, input$role_input, record_id))
+        poolWithTransaction(pool, function(conn) {
+          dbExecute(
+            conn,
+            "UPDATE users SET username = ?, role = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+            params = list(input$username_input, input$role_input, record_id)
+          )
+        })
         
-        showNotification("User updated successfully!", type = "message", duration = 3)
-        refresh_trigger(refresh_trigger() + 1)
+        show_toast(
+          title = "User Updated",
+          type = "success",
+          text = "User updated successfully!",
+          position = "top-end"
+        )
+
         removeModal()
       }, error = function(e) {
-        showNotification(paste("Error updating user:", e$message), type = "error", duration = 5)
+        show_toast(
+          title = "Error",
+          type = "error",
+          text = paste("Error updating user:", e$message),
+          position = "top-end"
+        )
       })
     })
     
@@ -101,7 +137,12 @@ usersServer <- function(id, pool) {
     observeEvent(input$delete, {
       selected <- input$table_rows_selected
       if (length(selected) == 0) {
-        showNotification("Please select a user to delete.", type = "warning")
+        show_toast(
+          title = "Delete Error",
+          type = "warning",
+          text = "Please select a user to delete.",
+          position = "center"
+        )
         return()
       }
       
@@ -126,31 +167,43 @@ usersServer <- function(id, pool) {
       record_id <- data()[selected, "id"]
       
       tryCatch({
-        query <- "DELETE FROM users WHERE id = ?"
-        dbExecute(pool, query, params = list(record_id))
+        poolWithTransaction(pool, function(conn) {
+          dbExecute(
+            conn,
+            "DELETE FROM users WHERE id = ?",
+            params = list(record_id)
+          )
+        })
         
-        showNotification("User deleted successfully!", type = "message", duration = 3)
-        refresh_trigger(refresh_trigger() + 1)
+        show_toast(
+          title = "User Deleted",
+          type = "success",
+          text = "User deleted successfully!",
+          position = "top-end"
+        )
+   
         removeModal()
       }, error = function(e) {
-        showNotification(paste("Error deleting user:", e$message), type = "error", duration = 5)
+        show_toast(
+          title = "Error",
+          type = "error",
+          text = paste("Error deleting user:", e$message),
+          position = "top-end"
+        )
       })
     })
     
-    observeEvent(input$refresh, {
-      refresh_trigger(refresh_trigger() + 1)
-    })
     
     # Render Data Table
     output$table <- DT::renderDataTable({
       DT::datatable(
         data(),
-        colnames = c("ID","Username", "Role", "Updated At"),
+        colnames = c("ID", "Username", "Role", "Updated At"),
         selection = "single",
         rownames = FALSE,
         options = list(
           columnDefs = list(
-            list(targets = c(0,3), visible = FALSE)  # Hide ID column
+            list(targets = c(0, 3), visible = FALSE)  # Hide ID column
           )
         )
       )

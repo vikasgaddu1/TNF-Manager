@@ -1,4 +1,4 @@
-reportingEffortsServer <- function(id, pool) {
+reportingEffortsServer <- function(id, pool, tables_data) {
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
     
@@ -6,10 +6,19 @@ reportingEffortsServer <- function(id, pool) {
     refresh_trigger <- reactiveVal(0)
     
     data <- reactive({
-      refresh_trigger()
-      dbReadTable(pool, "reporting_efforts")
+      tables_data$reporting_efforts()
     })
     
+    observeEvent(input$study_input, {
+      shinyFeedback::hideFeedback("study_input")
+    })
+    observeEvent(input$db_release_input, {
+      shinyFeedback::hideFeedback("db_release_input")
+    })
+    observeEvent(input$effort_input, {
+      shinyFeedback::hideFeedback("effort_input")
+    })
+
     # Add Record
     observeEvent(input$add, {
       showModal(modalDialog(
@@ -28,8 +37,16 @@ reportingEffortsServer <- function(id, pool) {
     })
     
     observeEvent(input$confirm_add, {
-      req(input$study_input, input$db_release_input, input$effort_input)
       
+      if ((is.null(input$study_input) || input$study_input == "") ||
+      (is.null(input$db_release_input) || input$db_release_input == "") ||  
+      (is.null(input$effort_input) || input$effort_input == ""))  {
+        feedbackDanger("study_input", is.null(input$study_input) || input$study_input == "", "Study is required")
+        feedbackDanger("db_release_input", is.null(input$db_release_input) || input$db_release_input == "", "Database Release is required")
+        feedbackDanger("effort_input", is.null(input$effort_input) || input$effort_input == "", "Reporting Effort is required")
+        return()
+      }
+
       tryCatch({
         new_record <- data.frame(
           study = input$study_input,
@@ -38,13 +55,24 @@ reportingEffortsServer <- function(id, pool) {
           stringsAsFactors = FALSE
         )
         
-        dbWriteTable(pool, "reporting_efforts", new_record, append = TRUE, row.names = FALSE)
+        poolWithTransaction(pool, function(conn) {
+          dbWriteTable(conn, "reporting_efforts", new_record, append = TRUE, row.names = FALSE)
+        })
         
-        showNotification("Reporting Effort added successfully!", type = "message", duration = 3)
-        refresh_trigger(refresh_trigger() + 1)
+        show_toast(
+          title = "Success",
+          type = "success",
+          text = "Reporting Effort added successfully!",
+          position = "top-end"
+        )
         removeModal()
       }, error = function(e) {
-        showNotification(paste("Error adding record:", e$message), type = "error", duration = 5)
+        show_toast(
+          title = "Error",
+          type = "error",
+          text = paste("Error adding record:", e$message),
+          position = "top-end"
+        )
       })
     })
     
@@ -52,7 +80,12 @@ reportingEffortsServer <- function(id, pool) {
     observeEvent(input$edit, {
       selected <- input$table_rows_selected
       if (length(selected) == 0) {
-        showNotification("Please select a record to edit.", type = "warning")
+        show_toast(
+          title = "Information",
+          type = "info",
+          text = "Please select a record to edit.",
+          position = "center"
+        )
         return()
       }
       
@@ -74,19 +107,39 @@ reportingEffortsServer <- function(id, pool) {
     })
     
     observeEvent(input$confirm_edit, {
-      req(input$study_input, input$db_release_input, input$effort_input)
       selected <- input$table_rows_selected
       record_id <- data()[selected, "id"]
       
+      if ((is.null(input$study_input) || input$study_input == "") ||
+      (is.null(input$db_release_input) || input$db_release_input == "") ||
+      (is.null(input$effort_input) || input$effort_input == ""))  {
+        feedbackDanger("study_input",is.null(input$study_input) || input$study_input == "", "Study is required")
+        feedbackDanger("db_release_input", is.null(input$db_release_input) || input$db_release_input == "", "Database Release is required") 
+        feedbackDanger("effort_input", is.null(input$effort_input) || input$effort_input == "", "Reporting Effort is required")
+        return()
+      }
+  
+
       tryCatch({
         query <- "UPDATE reporting_efforts SET study = ?, database_release = ?, reporting_effort = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?"
-        dbExecute(pool, query, params = list(input$study_input, input$db_release_input, input$effort_input, record_id))
+        poolWithTransaction(pool, function(conn) {
+          dbExecute(conn, query, params = list(input$study_input, input$db_release_input, input$effort_input, record_id))
+        })
         
-        showNotification("Reporting Effort updated successfully!", type = "message", duration = 3)
-        refresh_trigger(refresh_trigger() + 1)
+        show_toast(
+          title = "Success",
+          type = "success",
+          text = "Reporting Effort updated successfully!",
+          position = "top-end"
+        )
         removeModal()
       }, error = function(e) {
-        showNotification(paste("Error updating record:", e$message), type = "error", duration = 5)
+        show_toast(
+          title = "Error",
+          type = "error",
+          text = paste("Error updating record:", e$message),
+          position = "top-end"
+        )
       })
     })
     
@@ -94,7 +147,12 @@ reportingEffortsServer <- function(id, pool) {
     observeEvent(input$delete, {
       selected <- input$table_rows_selected
       if (length(selected) == 0) {
-        showNotification("Please select a record to delete.", type = "warning")
+        show_toast(
+          title = "Information",
+          type = "info",
+          text = "Please select a record to delete.",
+          position = "center"
+        )
         return()
       }
       
@@ -120,19 +178,27 @@ reportingEffortsServer <- function(id, pool) {
       
       tryCatch({
         query <- "DELETE FROM reporting_efforts WHERE id = ?"
-        dbExecute(pool, query, params = list(record_id))
+        poolWithTransaction(pool, function(conn) {
+          dbExecute(conn, query, params = list(record_id))
+        })
         
-        showNotification("Reporting Effort deleted successfully!", type = "message", duration = 3)
-        refresh_trigger(refresh_trigger() + 1)
+        show_toast(
+          title = "Success",
+          type = "success",
+          text = "Reporting Effort deleted successfully!",
+          position = "top-end"
+        )
         removeModal()
       }, error = function(e) {
-        showNotification(paste("Error deleting record:", e$message), type = "error", duration = 5)
+        show_toast(
+          title = "Error",
+          type = "error",
+          text = paste("Error deleting record:", e$message),
+          position = "top-end"
+        )
       })
     })
-    
-    observeEvent(input$refresh, {
-      refresh_trigger(refresh_trigger() + 1)
-    })
+  
     
     # Render Data Table
     output$table <- DT::renderDataTable({

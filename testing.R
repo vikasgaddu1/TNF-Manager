@@ -109,4 +109,56 @@ table_data <- table_data %>%
 # Print the table
 table_data
 
+# Function to modify datasets table structure
+modify_datasets_table <- function(pool) {
+  tryCatch({
+    poolWithTransaction(pool, function(conn) {
+      # Create temporary table
+      dbExecute(conn, "CREATE TEMP TABLE datasets_temp AS SELECT * FROM datasets;")
+      
+      # Drop original table
+      dbExecute(conn, "DROP TABLE datasets;")
+      
+      # Recreate table without UNIQUE constraint
+      dbExecute(
+        conn,
+        "CREATE TABLE datasets (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          dataset_type TEXT NOT NULL,
+          category_name TEXT NOT NULL,
+          dataset_name TEXT NOT NULL,
+          dataset_label TEXT NOT NULL,
+          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );"
+      )
+      
+      # Copy data back
+      dbExecute(conn, "INSERT INTO datasets (id, dataset_type, category_name, dataset_name, dataset_label, updated_at) 
+                      SELECT id, dataset_type, category_name, dataset_name, dataset_label, updated_at 
+                      FROM datasets_temp;")
+      
+      # Drop temporary table
+      dbExecute(conn, "DROP TABLE datasets_temp;")
+      
+      # Create trigger for updated_at
+      dbExecute(
+        conn,
+        "CREATE TRIGGER IF NOT EXISTS update_datasets_updated_at 
+         AFTER UPDATE ON datasets
+         FOR EACH ROW
+         BEGIN
+           UPDATE datasets 
+           SET updated_at = DATETIME('now', 'localtime')
+           WHERE id = NEW.id;
+         END;"
+      )
+    })
+    
+    message("Successfully modified datasets table structure")
+  }, error = function(e) {
+    message("Error modifying datasets table: ", e$message)
+  })
+}
+pool <- dbPool(RSQLite::SQLite(), dbname = "data/database.sqlite", create = TRUE)
+# modify_datasets_table(pool)
 

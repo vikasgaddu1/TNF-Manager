@@ -1,23 +1,17 @@
-singleColumnCRUDServer <- function(id, pool, table_name, text_column) {
+singleColumnCRUDServer <- function(id, pool, table_name, text_column, tables_data) {
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
     
-    # Capitalize first letter for display and fetch first word
-    
-    # display_name <- tools::toTitleCase(gsub("_", " ", text_column))
+    # Prepare display names
     display_name <- text_column %>%
-      str_extract("^[^_]+") %>%         # Extract everything before first underscore
+      str_extract("^[^_]+") %>%
       str_to_title()
-    
     display_name_plural <- table_name %>%
       str_to_title()
     
-    # Trigger to refresh data
-    refresh_trigger <- reactiveVal(0)
-    
+    # Create a reactive to access the table data
     data <- reactive({
-      refresh_trigger()
-      dbReadTable(pool, table_name)
+      tables_data[[table_name]]()
     })
     
     # Add Record
@@ -48,214 +42,214 @@ singleColumnCRUDServer <- function(id, pool, table_name, text_column) {
       ))
     })
     
+    observeEvent(input$text_input, {
+      if (!(is.null(input$text_input) || input$text_input == "")) {
+          shinyFeedback::hideFeedback("text_input")
+      }
+    })
+    
     observeEvent(input$confirm_add, {
-      req(input$text_input)
+      # Validate the input field
+      if (is.null(input$text_input) || input$text_input == "") {
+        shinyFeedback::showFeedbackDanger("text_input", "Input cannot be empty.")
+        return()
+      }
+      
+      # Hide feedback if validation passes
+      shinyFeedback::hideFeedback("text_input")
       
       tryCatch({
-        new_record <- data.frame(setNames(list(input$text_input), text_column), stringsAsFactors = FALSE)
+        # Use poolWithTransaction to manage transactions
+        poolWithTransaction(pool, function(conn) {
+          dbExecute(
+            conn,
+            sprintf("INSERT INTO %s (%s) VALUES (?)", table_name, text_column),
+            params = list(input$text_input)
+          )
+        })
         
-        dbWriteTable(pool,
-                     table_name,
-                     new_record,
-                     append = TRUE,
-                     row.names = FALSE)
-        
-        showNotification(
-          paste(display_name, "added successfully!"),
-          type = "message",
-          duration = 3
+        # Notify the user of success using shinyWidgets::show_toast
+        show_toast(
+          title = paste(display_name, "Added"),
+          type = "success",
+          text = paste(display_name, "added successfully!"),
+          position = "top-end"
         )
-        
-        refresh_trigger(refresh_trigger() + 1)
         removeModal()
       }, error = function(e) {
-        showNotification(
-          paste("Error adding", tolower(display_name), ":", e$message),
+        # Handle errors gracefully and notify using shinyWidgets::show_toast
+        show_toast(
+          title = "Error",
           type = "error",
-          duration = 5
+          text = paste("Error adding", tolower(display_name), ":", e$message),
+          position = "top-end"
         )
       })
     })
     
+    
+    # Similar transaction logic can be applied to the "Edit Record" and "Delete Record" sections
+    
     # Edit Record
     observeEvent(input$edit, {
       selected <- input$table_rows_selected
-      
       if (length(selected) == 0) {
-        showNotification(
-          paste("Please select a", tolower(display_name), "to edit"),
+        show_toast(
+          title = "Edit Error",
           type = "warning",
-          duration = 3,
-          closeButton = TRUE
+          text = "No row selected for editing.",
+          position = "center"
         )
         return()
       }
-      
       record <- data()[selected, ]
-      
       showModal(modalDialog(
-        title = div(
-          class = "d-flex align-items-center",
-          icon("edit", class = "text-warning me-2"),
-          paste("Edit", display_name)
-        ),
+        title = div(icon("edit"), paste("Edit", display_name)),
         div(
-          class = "form-group mb-3",
+          class = "form-group",
           textInput(
             ns("text_input"),
-            label = div(class = "form-label", display_name, span(class = "text-danger", "*")),
+            label = display_name,
             value = record[[text_column]],
             width = "100%"
           )
         ),
         footer = div(
-          class = "modal-footer",
-          modalButton("Cancel", icon = icon("times")),
-          actionButton(
-            ns("confirm_edit"),
-            "Save Changes",
-            class = "btn btn-warning",
-            icon = icon("save")
-          )
-        ),
-        size = "m",
-        easyClose = TRUE
+          modalButton("Cancel"),
+          actionButton(ns("confirm_edit"), "Save Changes", class = "btn btn-warning")
+        )
       ))
     })
     
     observeEvent(input$confirm_edit, {
-      req(input$text_input)
-      selected <- input$table_rows_selected
+      # Validate the input field
+      if (is.null(input$text_input) || input$text_input == "") {
+        shinyFeedback::showFeedbackDanger(ns("text_input"), "Input cannot be empty.")
+        return()
+      }
+      
+      # Hide feedback if validation passes
+      shinyFeedback::hideFeedback(ns("text_input"))
       
       tryCatch({
-        query <- sprintf("UPDATE %s SET %s = ? WHERE id = ?", table_name, text_column)
+        selected <- input$table_rows_selected
+        if (length(selected) == 0) {
+          show_toast(
+            title = "Edit Error",
+            type = "warning",
+            text = "No row selected for editing.",
+            position = "top-end"
+          )
+          return()
+        }
         
-        dbExecute(pool, query, params = list(input$text_input, data()[selected, "id"]))
+        # Use poolWithTransaction to manage transactions
+        poolWithTransaction(pool, function(conn) {
+          dbExecute(
+            conn,
+            sprintf("UPDATE %s SET %s = ? WHERE id = ?", table_name, text_column),
+            params = list(input$text_input, data()[selected, "id"])
+          )
+        })
         
-        showNotification(
-          paste(display_name, "updated successfully!"),
-          type = "message",
-          duration = 3
+        # Notify the user of success using shinyWidgets::show_toast
+        show_toast(
+          title = paste(display_name, "Updated"),
+          type = "success",
+          text = paste(display_name, "updated successfully!"),
+          position = "top-end"
         )
-        
-        refresh_trigger(refresh_trigger() + 1)
         removeModal()
       }, error = function(e) {
-        showNotification(
-          paste(
-            "Error updating",
-            tolower(display_name),
-            ":",
-            e$message
-          ),
+        # Handle errors gracefully and notify using shinyWidgets::show_toast
+        show_toast(
+          title = "Error",
           type = "error",
-          duration = 5
+          text = paste("Error updating", tolower(display_name), ":", e$message),
+          position = "top-end"
         )
       })
     })
+    
     
     # Delete Record
     observeEvent(input$delete, {
       selected <- input$table_rows_selected
-      
       if (length(selected) == 0) {
-        showNotification(
-          paste("Please select a", tolower(display_name), "to delete"),
+        show_toast(
+          title = "Delete Error",
           type = "warning",
-          duration = 3,
-          closeButton = TRUE
+          text = "No row selected for deletion.",
+          position = "center"
         )
         return()
       }
-      
       record <- data()[selected, ]
-      
       showModal(modalDialog(
-        title = div(
-          class = "d-flex align-items-center",
-          icon("trash-alt", class = "text-danger me-2"),
-          paste("Delete", display_name)
-        ),
+        title = div(icon("trash-alt"), paste("Delete", display_name)),
         div(
           class = "alert alert-danger",
-          icon("exclamation-triangle", class = "me-2"),
-          "This action cannot be undone!"
-        ),
-        div(
-          class = "mb-3",
-          sprintf(
-            "Are you sure you want to delete this %s: '%s'?",
-            tolower(display_name),
-            record[[text_column]]
-          )
+          sprintf("Are you sure you want to delete this %s: '%s'?", tolower(display_name), record[[text_column]])
         ),
         footer = div(
-          class = "modal-footer",
-          modalButton("Cancel", icon = icon("times")),
-          actionButton(
-            ns("confirm_delete"),
-            "Delete Record",
-            class = "btn btn-danger",
-            icon = icon("trash-alt")
-          )
-        ),
-        size = "m",
-        easyClose = TRUE
+          modalButton("Cancel"),
+          actionButton(ns("confirm_delete"), "Delete Record", class = "btn btn-danger")
+        )
       ))
     })
     
     observeEvent(input$confirm_delete, {
-      req(input$table_rows_selected)
       selected <- input$table_rows_selected
-      record_id <- data()[selected, "id"]
+      
+      # Validate that a row is selected
+      if (is.null(selected) || length(selected) == 0) {
+        show_toast(
+          title = "Delete Error",
+          type = "warning",
+          text = "No row selected for deletion.",
+          position = "top-end"
+        )
+        return()
+      }
       
       tryCatch({
-        query <- sprintf("DELETE FROM %s WHERE id = ?", table_name)
+        # Use poolWithTransaction to manage transactions
+        poolWithTransaction(pool, function(conn) {
+          dbExecute(
+            conn,
+            sprintf("DELETE FROM %s WHERE id = ?", table_name),
+            params = list(data()[selected, "id"])
+          )
+        })
         
-        dbExecute(pool, query, params = list(record_id))
-        
-        if (table_name == "categories"){
-          dbExecute(pool, "DELETE FROM sub_categories WHERE category_id = ?", params = list(record_id))
-        }
-        showNotification(
-          paste(display_name, "deleted successfully!"),
-          type = "message",
-          duration = 3
+        # Notify the user of success using shinyWidgets::show_toast
+        show_toast(
+          title = paste(display_name, "Deleted"),
+          type = "success",
+          text = paste(display_name, "deleted successfully!"),
+          position = "top-end"
         )
-        
-        refresh_trigger(refresh_trigger() + 1)
         removeModal()
       }, error = function(e) {
-        showNotification(
-          paste(
-            "Error deleting",
-            tolower(display_name),
-            ":",
-            e$message
-          ),
+        # Handle errors gracefully and notify using shinyWidgets::show_toast
+        show_toast(
+          title = "Error",
           type = "error",
-          duration = 5
+          text = paste("Error deleting", tolower(display_name), ":", e$message),
+          position = "top-end"
         )
       })
     })
     
-    observeEvent(input$refresh, {
-      refresh_trigger(refresh_trigger() + 1)
-    })
     
+    # Render DataTable
     output$table <- DT::renderDataTable({
       DT::datatable(
         data(),
-        colnames = setNames(
-          c("id", text_column, "updated_at"),
-          c("ID", display_name_plural, "Last Updated")
-        ),
+        colnames = setNames(c("id", text_column, "updated_at"), c("ID", display_name_plural, "Last Updated")),
         selection = "single",
         rownames = FALSE,
-        class = 'table table-striped table-bordered',
-        options = list(columnDefs = list(list(
-          targets = c(0, 2), visible = FALSE
-        )))
+        options = list(columnDefs = list(list(targets = c(0, 2), visible = FALSE)))
       )
     })
   })

@@ -1,134 +1,87 @@
-reportCRUDServer <- function(id, pool, tabs_input) {
+reportCRUDServer <- function(id, pool, tables_data) {
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
     
-    # Trigger to refresh data
-    refresh_trigger <- reactiveVal(0)
-    
-    # Auto-refresh categories when tab is selected
-    observeEvent(tabs_input(), {
-      if (tabs_input() == "reports") {
-        refresh_trigger(refresh_trigger() + 1)
-        showNotification("Refreshing reports",
-                         type = "message",
-                         duration = 1)
-      }
-    }, ignoreInit = TRUE)
-    
-    
-    # Load and join data only once, when the app initializes
-    cat_subcat <- reactive({
-      refresh_trigger()
-      tbl_categories <- dbReadTable(pool, "categories") %>%
-        select(id, category_name)
-      cat_subcat <- dbReadTable(pool, "sub_categories")
-      
-      cat_subcat %>%
-        left_join(tbl_categories, by = c("category_id" = "id")) %>%
-        select(
-          id,
-          category_id,
-          category_name,
-          sub_category_name,
-          suggested_ich_number,
-          updated_at
-        ) %>%
-        arrange(category_name, sub_category_name) %>%
-        filter(!is.na(category_name))
-      
-    })
-    
-    titles <- reactive({
-      refresh_trigger()
-      dbReadTable(pool, "titles")
-    })
-    
-    footnotes <- reactive({
-      refresh_trigger()
-      dbReadTable(pool, "footnotes")
-    })
-    
-    populations <- reactive({
-      refresh_trigger()
-      dbReadTable(pool, "populations")
-    })
-    
-    # Category choices for the dropdown
-    output$category_dropdown <- renderUI({
-      selectInput(
-        ns("category_name"),
-        "Category",
-        choices = unique(cat_subcat()$category_name),
-        selected = NULL
-      )
-    })
-    
+    # Reactive Values and Data ----------------------------------------
     data <- reactive({
-      refresh_trigger()
+      # Get data from reactive sources
+      reports_data <- tables_data$reports()
+      categories_data <- tables_data$categories()
+      sub_categories_data <- tables_data$sub_categories()
+      populations_data <- tables_data$populations()
+      titles_data <- tables_data$titles()
+      footnotes_data <- tables_data$footnotes()
+      report_titles_data <- tables_data$report_titles()
+      report_footnotes_data <- tables_data$report_footnotes()
       
-      # Get main report data
-      main_query <- "
-    SELECT
-      r.report_key,
-      r.title_key,
-      r.report_type,
-      c.category_name,
-      s.sub_category_name,
-      s.suggested_ich_number,
-      p.population_text,
-      r.report_ich_number,
-      r.id
-    FROM reports r
-    LEFT JOIN categories c ON r.report_category_id = c.id
-    LEFT JOIN sub_categories s ON r.report_sub_category_id = s.id and r.report_category_id = s.category_id
-    LEFT JOIN populations p ON r.population_id = p.id
-  "
-      main_data <- dbGetQuery(pool, main_query)
-      
-      # Get titles
-      titles_query <- "
-    SELECT rt.report_id,
-           GROUP_CONCAT(t.title_text, '@# ') as titles
-    FROM report_titles rt
-    JOIN titles t ON rt.title_id = t.id
-    GROUP BY rt.report_id
-  "
-      titles_data <- dbGetQuery(pool, titles_query)
-      
-      # Get footnotes
-      footnotes_query <- "
-    SELECT rf.report_id,
-           GROUP_CONCAT(f.footnote_text, '@# ') as footnotes
-    FROM report_footnotes rf
-    JOIN footnotes f ON rf.footnote_id = f.id
-    GROUP BY rf.report_id
-  "
-      footnotes_data <- dbGetQuery(pool, footnotes_query)
-      
-      # Combine data
-      result <- main_data %>%
-        left_join(titles_data, join_by(id == report_id)) %>% 
-        left_join(footnotes_data, join_by(id == report_id)) %>% 
-        arrange(category_name, sub_category_name, report_type, report_key) %>% 
+      # Main data join
+      main_data <- reports_data %>%
+        left_join(categories_data, by = c("report_category_id" = "id")) %>%
+        left_join(
+          sub_categories_data,
+          by = c(
+            "report_sub_category_id" = "id",
+            "report_category_id" = "category_id"
+          )
+        ) %>%
+        left_join(populations_data, by = c("population_id" = "id")) %>%
         select(
-          id,
-          report_type,
-          category_name,
-          sub_category_name,
-          report_key,
-          title_key,
-          population_text,
-          report_ich_number,
-          titles,
-          footnotes
+          id, report_key, title_key, report_type,
+          category_name, sub_category_name, suggested_ich_number,
+          population_text, report_ich_number
         )
       
+      # Process titles
+      titles_processed <- report_titles_data %>%
+        inner_join(titles_data, by = c("title_id" = "id")) %>%
+        group_by(report_id) %>%
+        summarise(titles = paste(title_text, collapse = "@# "))
+      
+      # Process footnotes
+      footnotes_processed <- report_footnotes_data %>%
+        inner_join(footnotes_data, by = c("footnote_id" = "id")) %>%
+        group_by(report_id) %>%
+        summarise(footnotes = paste(footnote_text, collapse = "@# "))
+      
+      # Combine all data
+      main_data %>%
+        left_join(titles_processed, by = c("id" = "report_id")) %>%
+        left_join(footnotes_processed, by = c("id" = "report_id")) %>%
+        arrange(category_name, sub_category_name, report_type, report_key) %>%
+        select(
+          id, report_type, category_name, sub_category_name,
+          report_key, title_key, population_text,
+          report_ich_number, titles, footnotes
+        )
     })
     
+    cat_subcat <- reactive({
+      tables_data$categories() %>%
+        left_join(
+          tables_data$sub_categories(),
+          by = c("id" = "category_id")
+        ) %>%
+        select(
+          category_name,
+          sub_category_name,
+          suggested_ich_number
+        )
+    })
+    
+    # Input Validation Handlers ---------------------------------------
+    observeEvent(input$report_type, { shinyFeedback::hideFeedback("report_type") })
+    observeEvent(input$category_name, { shinyFeedback::hideFeedback("category_name") })
+    observeEvent(input$sub_category_name, { shinyFeedback::hideFeedback("sub_category_name") })
+    observeEvent(input$report_key, { shinyFeedback::hideFeedback("report_key") })
+    observeEvent(input$title_key, { shinyFeedback::hideFeedback("title_key") })
+    observeEvent(input$report_ich_number, { shinyFeedback::hideFeedback("report_ich_number") })
+    observeEvent(input$titles, { shinyFeedback::hideFeedback("titles") })
+    observeEvent(input$populations, { shinyFeedback::hideFeedback("populations") })
+    
+    # UI Outputs ---------------------------------------------------
     output$table <- DT::renderDT({
-      data <- data() # Ensure the reactive data is fetched
       DT::datatable(
-        data,
+        data(),
         filter = "top",
         colnames = c(
           "ID" = "id",
@@ -140,7 +93,8 @@ reportCRUDServer <- function(id, pool, tabs_input) {
           "Population" = "population_text",
           "ICH Number" = "report_ich_number",
           "Titles" = "titles",
-          "Footnotes" = "footnotes"),
+          "Footnotes" = "footnotes"
+        ),
         selection = "single",
         rownames = FALSE,
         class = 'table table-striped table-bordered',
@@ -150,14 +104,21 @@ reportCRUDServer <- function(id, pool, tabs_input) {
       )
     })
     
+    output$category_dropdown <- renderUI({
+      selectInput(
+        ns("category_name"),
+        "Category",
+        choices = tables_data$categories() %>% pull(category_name),
+        selected = NULL
+      )
+    })
     
-    # Sub-category drop down that updates based on selected category
     output$sub_category_dropdown <- renderUI({
       req(input$category_name)
+      
       sub_cats <- cat_subcat() %>%
         filter(category_name == input$category_name) %>%
-        pull(sub_category_name) %>%
-        unique()
+        pull(sub_category_name)
       
       selectInput(
         ns("sub_category_name"),
@@ -177,12 +138,15 @@ reportCRUDServer <- function(id, pool, tabs_input) {
     output$suggested_ich_number_text <- renderText({
       req(input$category_name, input$sub_category_name)
       cat_subcat() %>%
-        filter(category_name == input$category_name,
-               sub_category_name == input$sub_category_name) %>%
+        filter(
+          category_name == input$category_name,
+          sub_category_name == input$sub_category_name
+        ) %>%
         pull(suggested_ich_number)
     })
     
-    # Display modal with cascading dropdowns
+    # Event Handlers -----------------------------------------------
+    # Add Report
     observeEvent(input$add, {
       showModal(modalDialog(
         title = div(icon("plus-circle"), "Add Report"),
@@ -218,21 +182,21 @@ reportCRUDServer <- function(id, pool, tabs_input) {
           selectizeInput(
             ns("titles"),
             "Select Titles",
-            choices = titles()$title_text,
+            choices = tables_data$titles()$title_text,
             multiple = TRUE
           ),
           selectizeInput(
             ns("footnotes"),
             "Select Footnotes",
-            choices = footnotes()$footnote_text,
+            choices = tables_data$footnotes()$footnote_text,
             multiple = TRUE
           ),
           selectizeInput(
             ns("populations"),
             "Select Population",
-            choices = populations()$population_text
+            choices = tables_data$populations()$population_text
           )
-          ),
+        ),
         footer = div(
           class = "modal-footer",
           modalButton("Cancel", icon = icon("times")),
@@ -247,525 +211,516 @@ reportCRUDServer <- function(id, pool, tabs_input) {
         easyClose = TRUE
       ))
     })
-    
-    # Add logic for confirm add button (e.g., add to database or refresh data)
+
+ # Database Operations ------------------------------------------
+    # Add Report Handler
     observeEvent(input$confirm_add, {
-      # print("Confirm Add button clicked")
-      # print(paste("Category:", input$category_name)) # Check input values
-      # print(paste("Sub-category:", input$sub_category_name))
-      # print(paste("Report Key:", input$report_key))
-      # print(paste("Title Key:", input$title_key))
-      # print(paste("Suggested ICH Number:", input$report_ich_number))
-      # print(paste("Report Type:", input$report_type))
-      # print(paste("Titles:", toString(input$titles)))
-      # print(paste("Footnotes:", toString(input$footnotes)))
-      # print(paste("Population:", input$populations))
+      has_error <- FALSE
       
       # Validate required inputs
-      req(
-        input$category_name,
-        input$sub_category_name,
-        input$report_key,
-        input$title_key,
-        input$report_ich_number,
-        input$report_type,
-        input$titles,
-        input$populations
-      )
-      
-      # Add validation rules for report_key and title_key prefixes
-      validate_keys <- function(report_type, report_key, title_key) {
-        expected_prefix <- switch(report_type,
-                                  "Table" = "t",
-                                  "Listing" = "l",
-                                  "Figure" = "f",
-                                  NULL)
-        
-        if (is.null(expected_prefix)) {
-          return(FALSE)
-        }
-        
-        report_key_valid <- startsWith(tolower(report_key), expected_prefix)
-        title_key_valid <- startsWith(tolower(title_key), expected_prefix)
-        
-        return(report_key_valid && title_key_valid)
+      if (is.null(input$report_type) || input$report_type == "") {
+        shinyFeedback::feedbackDanger("report_type", TRUE, "Report type is required")
+        has_error <- TRUE
       }
       
-      validate_ich_number <- function(ich_number) {
-        # Regex pattern: ^(1[4-6])\.(\d+\.)+(\d+|x)$
-        # Examples of valid patterns:
-        # 14.1.1
-        # 14.2.1.1
-        # 15.1.1.x
-        # 16.2.1.1
-        if (input$report_type == "Table"){
-          pattern <- "^(1[4])\\.((\\d+|x)\\.)+(\\d+|x)$"
-        }else if (input$report_type == "Listing"){
-          pattern <- "^(1[5])\\.((\\d+|x)\\.)+(\\d+|x)$"
-        }else if (input$report_type == "Figure"){
-          pattern <- "^(1[6])\\.((\\d+|x)\\.)+(\\d+|x)$"
-        }
-        
-        return(grepl(pattern, ich_number))
+      if (is.null(input$category_name) || input$category_name == "") {
+        shinyFeedback::feedbackDanger("category_name", TRUE, "Category is required")
+        has_error <- TRUE
       }
       
+      if (is.null(input$sub_category_name) || input$sub_category_name == "") {
+        shinyFeedback::feedbackDanger("sub_category_name", TRUE, "Sub-category is required")
+        has_error <- TRUE
+      }
       
-      # Validate keys before proceeding
+      if (is.null(input$report_key) || input$report_key == "") {
+        shinyFeedback::feedbackDanger("report_key", TRUE, "Report key is required")
+        has_error <- TRUE
+      }
+      
+      if (is.null(input$title_key) || input$title_key == "") {
+        shinyFeedback::feedbackDanger("title_key", TRUE, "Title key is required")
+        has_error <- TRUE
+      }
+      
+      if (is.null(input$report_ich_number) || input$report_ich_number == "") {
+        shinyFeedback::feedbackDanger("report_ich_number", TRUE, "ICH number is required")
+        has_error <- TRUE
+      }
+      
+      if (is.null(input$titles) || length(input$titles) == 0) {
+        shinyFeedback::feedbackDanger("titles", TRUE, "At least one title is required")
+        has_error <- TRUE
+      }
+      
+      if (is.null(input$populations) || input$populations == "") {
+        shinyFeedback::feedbackDanger("populations", TRUE, "Population is required")
+        has_error <- TRUE
+      }
+      
+      # Validate keys format
       if (!validate_keys(input$report_type, input$report_key, input$title_key)) {
-        showNotification(
-          sprintf("For %s, both report_key and title_key must start with '%s'",
-                  input$report_type,
-                  switch(input$report_type,
-                         "Table" = "t",
-                         "Listing" = "l",
-                         "Figure" = "f")),
-          type = "error"
-        )
-        return()
+        prefix <- switch(input$report_type,
+                      "Table" = "t",
+                      "Listing" = "l",
+                      "Figure" = "f")
+        shinyFeedback::feedbackDanger("report_key", TRUE, sprintf("Must start with '%s'", prefix))
+        shinyFeedback::feedbackDanger("title_key", TRUE, sprintf("Must start with '%s'", prefix))
+        has_error <- TRUE
       }
       
-      # Validate ICH number
+      # Validate ICH number format
       if (!validate_ich_number(input$report_ich_number)) {
-        showNotification(
-          paste("Invalid ICH number format. Must start with",
-                "14 for table, 15 for listing, or 16 for figure,",
-                "followed by number sections separated by dots,",
-                "and end with a number or 'x'.",
-                "\nExample: 14.1.1 or 15.2.1.x"),
-          type = "error"
+        prefix <- switch(input$report_type, "Table" = "14", "Listing" = "15", "Figure" = "16")
+        shinyFeedback::feedbackDanger(
+          "report_ich_number", 
+          TRUE, 
+          sprintf("Must start with %s for %s", prefix, tolower(input$report_type))
+        )
+        has_error <- TRUE
+      }
+      
+      if (has_error) {
+        show_toast(
+          title = "Validation Error",
+          type = "error",
+          text = "Please correct the highlighted fields",
+          position = "top-end"
         )
         return()
       }
-      
-      # Insert new report
+
       tryCatch({
-        # Start transaction
-        dbExecute(pool, "BEGIN")
+        # Get IDs from reactive tables
+        category_id <- tables_data$categories() %>%
+          filter(category_name == input$category_name) %>%
+          pull(id)
         
-        # Insert main report record
-        category_id <- dbGetQuery(pool, "SELECT id FROM categories WHERE category_name = ?", params = list(input$category_name))
-        sub_category_id <- dbGetQuery(
-          pool,
-          "
-          SELECT id 
-          FROM sub_categories 
-          WHERE sub_category_name = ? 
-            AND category_id = (SELECT id FROM categories WHERE category_name = ?)
-          ",
-          params = list(input$sub_category_name, input$category_name)
-        )
+        sub_category_id <- tables_data$sub_categories() %>%
+          filter(
+            sub_category_name == input$sub_category_name,
+            category_id == category_id
+          ) %>%
+          pull(id)
         
-        population_id <- dbGetQuery(pool, "SELECT id FROM populations WHERE population_text = ?", params = list(input$populations))
+        population_id <- tables_data$populations() %>%
+          filter(population_text == input$populations) %>%
+          pull(id)
         
-        # print(paste("Category ID:", category_id)) # Debugging
-        # print(paste("Sub-category ID:", sub_category_id))
-        # print(paste("Population ID:", population_id))
-        # 
-        # print(typeof(category_id$id))
-        # print(typeof(sub_category_id$id))
-        # print(typeof(population_id$id))
-        
-        
-        # Now pass these IDs to the query
-        dbExecute(
-          pool,
-          "
-          INSERT INTO reports (
-            report_key,
-            title_key,
-            report_type,
-            report_category_id,
-            report_sub_category_id,
-            report_ich_number,
-            population_id
-          )
-          VALUES (?, ?, ?, ?, ?, ?, ?)
-          
-          ",
-          params = list(
-            input$report_key,
-            input$title_key,
-            input$report_type,
-            category_id$id,
-            sub_category_id$id,
-            input$report_ich_number,
-            population_id$id
-          )
-        )
-        
-        report_id <- dbGetQuery(pool, "SELECT last_insert_rowid()")
-        # print(typeof(report_id[[1, 1]]))
-        # 
-        # print(paste("Inserted report ID:", report_id[[1, 1]])) # Debugging
-        
-        # Insert report titles
+        # For titles and footnotes
         if (!is.null(input$titles)) {
-          for (title_text in input$titles) {
-            sequence <- match(title_text, input$titles) # Get the first match
-            
-            # Ensure all parameters have valid values
-            # print(list(report_id = report_id[[1, 1]], sequence = sequence, title_text = title_text)) # Debugging
-            
-            dbExecute(
-              pool,
-              "INSERT INTO report_titles (report_id, title_id, sequence)
-       SELECT ?, id, ? FROM titles WHERE title_text = ?",
-              params = list(
-                report_id[[1, 1]],
-                sequence,
-                title_text
-              )
-            )
-          }
+          titles_data <- tables_data$titles() %>%
+            filter(title_text %in% input$titles)
         }
         
-        
-        # Insert footnotes if selected
         if (!is.null(input$footnotes)) {
-          for (footnote_text in input$footnotes) {
-            sequence <- match(footnote_text, input$footnotes) # Get the first match
-            print(which(input$footnotes == footnote_text))
-            dbExecute(
-              pool,
-              "INSERT INTO report_footnotes (report_id, footnote_id, sequence)
-           SELECT ?, id, ? FROM footnotes WHERE footnote_text = ?",
-              params = list(
-                report_id[[1, 1]],
-                which(input$footnotes == footnote_text),
-                footnote_text
-              )
-            )
-          }
+          footnotes_data <- tables_data$footnotes() %>%
+            filter(footnote_text %in% input$footnotes)
         }
         
-        # Commit transaction
-        dbExecute(pool, "COMMIT")
-        
-        # Refresh the data
-        refresh_trigger(refresh_trigger() + 1)
-        
-        # Show success notification
-        showNotification("Report added successfully", type = "message")
-        
-      }, error = function(e) {
-        # Rollback on error
-        print(paste("Error:", e$message))
-        showNotification(paste("Error:", e$message), type = "error")
-        dbExecute(pool, "ROLLBACK")
-        
-      })
-      
-      # Close the modal
-      removeModal()
-    })
-    
-    # Edit Report
-    # Add these inside the moduleServer function, after the existing code
-    
-    # Edit button observer
-    observeEvent(input$edit, {
-      selected_row <- input$table_rows_selected
-      if (length(selected_row) > 0) {
-        report_data <- data()[selected_row, ]
-        #print(report_data$footnotes)
-        
-        selected_footnotes <- if (!is.null(report_data$footnotes) && is.character(report_data$footnotes)) {
-          trimws(unlist(strsplit(report_data$footnotes, "@#")))
-        } else {
-          NULL
-        }
-        
-        selected_titles <- if (!is.null(report_data$titles) && is.character(report_data$titles)) {
-          trimws(unlist(strsplit(report_data$titles, "@#")))
-        } else {
-          NULL
-        }
-        
-        
-        showModal(modalDialog(
-          title = div(icon("edit"), "Edit Report"),
-          div(
-            class = "form-group",
-            selectizeInput(
-              ns("report_type"), 
-              "Select Report Type",
-              choices = c("Table", "Listing", "Figure"),
-              selected = report_data$report_type
-            ),
-            uiOutput(ns("category_dropdown")),
-            uiOutput(ns("sub_category_dropdown")),
-            textInput(
-              ns("report_key"),
-              "Report Key",
-              value = report_data$report_key
-            ),
-            textInput(
-              ns("title_key"),
-              "Title Key",
-              value = report_data$title_key
-            ),
-            textInput(
-              ns("report_ich_number"),
-              "ICH Number",
-              value = report_data$report_ich_number
-            ),
-            selectizeInput(
-              ns("titles"),
-              "Select Titles",
-              choices = titles()$title_text,
-              selected = selected_titles,
-              multiple = TRUE
-            ),
-            selectizeInput(
-              ns("footnotes"),
-              "Select Footnotes",
-              choices = footnotes()$footnote_text,
-              selected = selected_footnotes,
-              multiple = TRUE
-            ),
-            selectizeInput(
-              ns("populations"),
-              "Select Population",
-              choices = populations()$population_text,
-              selected = report_data$population_text
-            )
-          ),
-          footer = div(
-            class = "modal-footer",
-            modalButton("Cancel", icon = icon("times")),
-            actionButton(
-              ns("confirm_edit"),
-              "Save Changes",
-              class = "btn btn-primary",
-              icon = icon("save")
-            )
-          ),
-          size = "m"
-        ))
-      }else{
-        showNotification("Please select a row to edit", type = "warning", duration = 3)
-      }
-    })
-    
-    # Delete button observer
-    observeEvent(input$delete, {
-      selected_row <- input$table_rows_selected
-      if (length(selected_row) > 0) {
-        report_id <- data()[selected_row, "id"]
-        report_key <- data()[selected_row, "report_key"]
-        
-        showModal(modalDialog(
-          title = div(
-            class = "d-flex align-items-center",
-            icon("trash-alt", class = "text-danger me-2"),
-            "Delete Sub-Category"
-          ),
-          div(
-            class = "alert alert-danger",
-            icon("exclamation-triangle", class = "me-2"),
-            "This action cannot be undone!"
-          ),
-          div(
-            class = "mb-3",
-            sprintf("Are you sure you want to delete the report '%s'?", 
-                    report_key)
-          ),
-          footer = div(
-            class = "modal-footer",
-            modalButton(
-              "Cancel",
-              icon=icon("times")
-            ),
-            actionButton(
-              ns("confirm_delete"),
-              "Delete Category",
-              class = "btn btn-danger",
-              icon = icon("trash-alt")
-            )
-          ),
-          size = "m",
-          easyClose = TRUE
-        ))
-      }
-    })
-    
-    # Confirm delete observer
-    observeEvent(input$confirm_delete, {
-      selected_row <- input$table_rows_selected
-      if (length(selected_row) > 0) {
-        report_id <- data()[selected_row, "id"]
-        
-        tryCatch({
-          dbExecute(pool, "BEGIN")
-          
-          # Delete related records first
-          dbExecute(pool, "DELETE FROM report_titles WHERE report_id = ?", 
-                    params = list(report_id))
-          dbExecute(pool, "DELETE FROM report_footnotes WHERE report_id = ?", 
-                    params = list(report_id))
-          
-          # Delete the report
-          dbExecute(pool, "DELETE FROM reports WHERE id = ?", 
-                    params = list(report_id))
-          
-          dbExecute(pool, "COMMIT")
-          
-          refresh_trigger(refresh_trigger() + 1)
-          showNotification("Report deleted successfully", type = "message")
-        }, error = function(e) {
-          dbExecute(pool, "ROLLBACK")
-          showNotification(paste("Error:", e$message), type = "error")
-        })
-        
-        removeModal()
-      }
-    })
-    
-    # Confirm edit observer
-    observeEvent(input$confirm_edit, {
-      selected_row <- input$table_rows_selected
-      # Validate required inputs
-      req(
-        input$category_name,
-        input$sub_category_name,
-        input$report_key,
-        input$title_key,
-        input$report_ich_number,
-        input$report_type,
-        input$titles,
-        input$populations
-      )
-      
-      # Add validation rules for report_key and title_key prefixes
-      validate_keys <- function(report_type, report_key, title_key) {
-        expected_prefix <- switch(report_type,
-                                  "Table" = "t",
-                                  "Listing" = "l",
-                                  "Figure" = "f",
-                                  NULL)
-        
-        if (is.null(expected_prefix)) {
-          return(FALSE)
-        }
-        
-        report_key_valid <- startsWith(tolower(report_key), expected_prefix)
-        title_key_valid <- startsWith(tolower(title_key), expected_prefix)
-        
-        return(report_key_valid && title_key_valid)
-      }
-      
-      validate_ich_number <- function(ich_number) {
-        # Regex pattern: ^(1[4-6])\.(\d+\.)+(\d+|x)$
-        # Examples of valid patterns:
-        # 14.1.1
-        # 14.2.1.1
-        # 15.1.1.x
-        # 16.2.1.1
-        if (input$report_type == "Table"){
-          pattern <- "^(1[4])\\.(\\d+\\.)+(\\d+|x)$"
-        }else if (input$report_type == "Listing"){
-          pattern <- "^(1[5])\\.(\\d+\\.)+(\\d+|x)$"
-        }else if (input$report_type == "Figure"){
-          pattern <- "^(1[6])\\.(\\d+\\.)+(\\d+|x)$"
-        }
-        
-        return(grepl(pattern, ich_number))
-      }
-      
-      
-      # Validate keys before proceeding
-      if (!validate_keys(input$report_type, input$report_key, input$title_key)) {
-        showNotification(
-          sprintf("For %s, both report_key and title_key must start with '%s'",
-                  input$report_type,
-                  switch(input$report_type,
-                         "Table" = "t",
-                         "Listing" = "l",
-                         "Figure" = "f")),
-          type = "error"
-        )
-        return()
-      }
-      
-      # Validate ICH number
-      if (!validate_ich_number(input$report_ich_number)) {
-        showNotification(
-          paste("Invalid ICH number format. Must start with",
-                "14 for table, 15 for listing, or 16 for figure,",
-                "followed by number sections separated by dots,",
-                "and end with a number or 'x'.",
-                "\nExample: 14.1.1 or 15.2.1.x"),
-          type = "error"
-        )
-        return()
-      }
-      if (length(selected_row) > 0) {
-        report_id <- data()[selected_row, "id"]
-        
-        tryCatch({
-          dbExecute(pool, "BEGIN")
-          
-          # Update main report record
+        poolWithTransaction(pool, function(conn) {
+          # Insert main report
           dbExecute(
-            pool,
-            "UPDATE reports SET 
-         report_key = ?,
-         title_key = ?,
-         report_type = ?,
-         report_ich_number = ?,
-         report_category_id = (SELECT id FROM categories WHERE category_name = ?),
-         report_sub_category_id = (SELECT id FROM sub_categories WHERE sub_category_name = ?),
-         population_id = (SELECT id FROM populations WHERE population_text = ?)
-         WHERE id = ?",
+            conn,
+            "INSERT INTO reports (
+              report_key, title_key, report_type, report_category_id,
+              report_sub_category_id, report_ich_number, population_id
+            ) VALUES (?, ?, ?, ?, ?, ?, ?)",
             params = list(
               input$report_key,
               input$title_key,
               input$report_type,
+              category_id,
+              sub_category_id,
               input$report_ich_number,
-              input$category_name,
-              input$sub_category_name,
-              input$populations,
+              population_id
+            )
+          )
+          
+          report_id <- dbGetQuery(conn, "SELECT last_insert_rowid()")
+          
+          # Insert report titles
+          if (!is.null(input$titles)) {
+            for (title_text in input$titles) {
+              sequence <- match(title_text, input$titles)
+              title_id <- titles_data$id[titles_data$title_text == title_text]
+              dbExecute(
+                conn,
+                "INSERT INTO report_titles (report_id, title_id, sequence) VALUES (?, ?, ?)",
+                params = list(report_id[[1, 1]], title_id, sequence)
+              )
+            }
+          }
+          
+          # Insert footnotes
+          if (!is.null(input$footnotes)) {
+            for (footnote_text in input$footnotes) {
+              sequence <- match(footnote_text, input$footnotes)
+              footnote_id <- footnotes_data$id[footnotes_data$footnote_text == footnote_text]
+              dbExecute(
+                conn,
+                "INSERT INTO report_footnotes (report_id, footnote_id, sequence) VALUES (?, ?, ?)",
+                params = list(report_id[[1, 1]], footnote_id, sequence)
+              )
+            }
+          }
+        })
+        
+        show_toast(
+          title = "Success",
+          type = "success",
+          text = "Report added successfully!",
+          position = "top-end"
+        )
+        
+        removeModal()
+      }, error = function(e) {
+        show_toast(
+          title = "Error",
+          type = "error",
+          text = paste("Error adding report:", e$message),
+          position = "top-end"
+        )
+      })
+    })    
+
+     # Edit Button Handler
+    observeEvent(input$edit, {
+       if (is.null(input$table_rows_selected)) {
+        show_toast(
+          title = "Information",
+          type = "info",
+          text = "Please select a record to edit.",
+          position = "center"
+        )
+        return()
+      }
+      selected <- input$table_rows_selected
+      report <- data()[selected, ]
+      
+      showModal(modalDialog(
+        title = div(icon("edit"), "Edit Report"),
+        div(
+          class = "form-group",
+          selectizeInput(
+            ns("report_type"),
+            "Select Report Type",
+            choices = c("Table", "Listing", "Figure"),
+            selected = report$report_type
+          ),
+          uiOutput(ns("category_dropdown")),
+          uiOutput(ns("sub_category_dropdown")),
+          textInput(
+            ns("report_key"),
+            "Report Key",
+            value = report$report_key,
+            width = "100%"
+          ),
+          textInput(
+            ns("title_key"),
+            "Title Key",
+            value = report$title_key,
+            width = "100%"
+          ),
+          uiOutput(ns("suggested_ich_number")),
+          textInput(
+            ns("report_ich_number"),
+            "ICH Number",
+            value = report$report_ich_number,
+            width = "100%"
+          ),
+          selectizeInput(
+            ns("titles"),
+            "Select Titles",
+            choices = tables_data$titles()$title_text,
+            selected = strsplit(report$titles, "@# ")[[1]],
+            multiple = TRUE
+          ),
+          selectizeInput(
+            ns("footnotes"),
+            "Select Footnotes",
+            choices = tables_data$footnotes()$footnote_text,
+            selected = if (!is.na(report$footnotes)) strsplit(report$footnotes, "@# ")[[1]] else NULL,
+            multiple = TRUE
+          ),
+          selectizeInput(
+            ns("populations"),
+            "Select Population",
+            choices = tables_data$populations()$population_text,
+            selected = report$population_text
+          )
+        ),
+        footer = div(
+          class = "modal-footer",
+          modalButton("Cancel", icon = icon("times")),
+          actionButton(
+            ns("confirm_edit"),
+            "Save Changes",
+            class = "btn btn-primary",
+            icon = icon("save")
+          )
+        ),
+        size = "m",
+        easyClose = TRUE
+      ))
+    })
+ # Edit Report Handler
+    observeEvent(input$confirm_edit, {
+      has_error <- FALSE
+      
+      # Validate required inputs
+      if (is.null(input$report_type) || input$report_type == "") {
+        shinyFeedback::feedbackDanger("report_type", TRUE, "Report type is required")
+        has_error <- TRUE
+      }
+      
+      if (is.null(input$category_name) || input$category_name == "") {
+        shinyFeedback::feedbackDanger("category_name", TRUE, "Category is required")
+        has_error <- TRUE
+      }
+      
+      if (is.null(input$sub_category_name) || input$sub_category_name == "") {
+        shinyFeedback::feedbackDanger("sub_category_name", TRUE, "Sub-category is required")
+        has_error <- TRUE
+      }
+      
+      if (is.null(input$report_key) || input$report_key == "") {
+        shinyFeedback::feedbackDanger("report_key", TRUE, "Report key is required")
+        has_error <- TRUE
+      }
+      
+      if (is.null(input$title_key) || input$title_key == "") {
+        shinyFeedback::feedbackDanger("title_key", TRUE, "Title key is required")
+        has_error <- TRUE
+      }
+      
+      if (is.null(input$report_ich_number) || input$report_ich_number == "") {
+        shinyFeedback::feedbackDanger("report_ich_number", TRUE, "ICH number is required")
+        has_error <- TRUE
+      }
+      
+      if (is.null(input$titles) || length(input$titles) == 0) {
+        shinyFeedback::feedbackDanger("titles", TRUE, "At least one title is required")
+        has_error <- TRUE
+      }
+      
+      if (is.null(input$populations) || input$populations == "") {
+        shinyFeedback::feedbackDanger("populations", TRUE, "Population is required")
+        has_error <- TRUE
+      }
+      
+      # Validate keys format
+      if (!validate_keys(input$report_type, input$report_key, input$title_key)) {
+        prefix <- switch(input$report_type,
+                      "Table" = "t",
+                      "Listing" = "l",
+                      "Figure" = "f")
+        shinyFeedback::feedbackDanger("report_key", TRUE, sprintf("Must start with '%s'", prefix))
+        shinyFeedback::feedbackDanger("title_key", TRUE, sprintf("Must start with '%s'", prefix))
+        has_error <- TRUE
+      }
+      
+      # Validate ICH number format
+      if (!validate_ich_number(input$report_ich_number)) {
+        prefix <- switch(input$report_type, "Table" = "14", "Listing" = "15", "Figure" = "16")
+        shinyFeedback::feedbackDanger(
+          "report_ich_number", 
+          TRUE, 
+          sprintf("Must start with %s for %s", prefix, tolower(input$report_type))
+        )
+        has_error <- TRUE
+      }
+      
+      if (has_error) {
+        show_toast(
+          title = "Validation Error",
+          type = "error",
+          text = "Please correct the highlighted fields",
+          position = "top-end"
+        )
+        return()
+      }
+
+      tryCatch({
+        selected_row <- input$table_rows_selected
+        report_id <- data()[selected_row, "id"]
+        
+        # Get IDs from reactive tables
+        category_id <- tables_data$categories() %>%
+          filter(category_name == input$category_name) %>%
+          pull(id)
+        
+        sub_category_id <- tables_data$sub_categories() %>%
+          filter(
+            sub_category_name == input$sub_category_name,
+            category_id == category_id
+          ) %>%
+          pull(id)
+        
+        population_id <- tables_data$populations() %>%
+          filter(population_text == input$populations) %>%
+          pull(id)
+        
+        # For titles and footnotes
+        if (!is.null(input$titles)) {
+          titles_data <- tables_data$titles() %>%
+            filter(title_text %in% input$titles)
+        }
+        
+        if (!is.null(input$footnotes)) {
+          footnotes_data <- tables_data$footnotes() %>%
+            filter(footnote_text %in% input$footnotes)
+        }
+        
+        poolWithTransaction(pool, function(conn) {
+          # Update main report
+          dbExecute(
+            conn,
+            "UPDATE reports SET 
+              report_key = ?, title_key = ?, report_type = ?,
+              report_category_id = ?, report_sub_category_id = ?,
+              report_ich_number = ?, population_id = ?
+             WHERE id = ?",
+            params = list(
+              input$report_key, input$title_key, input$report_type,
+              category_id, sub_category_id,
+              input$report_ich_number, population_id,
               report_id
             )
           )
           
           # Update titles
-          dbExecute(pool, "DELETE FROM report_titles WHERE report_id = ?", 
-                    params = list(report_id))
-          for (title_text in input$titles) {
-            sequence <- match(title_text, input$titles)
-            dbExecute(
-              pool,
-              "INSERT INTO report_titles (report_id, title_id, sequence) 
-           SELECT ?, id, ? FROM titles WHERE title_text = ?",
-              params = list(report_id, sequence, title_text)
-            )
+          dbExecute(conn, "DELETE FROM report_titles WHERE report_id = ?", 
+                   params = list(report_id))
+          
+          if (!is.null(input$titles)) {
+            for (title_text in input$titles) {
+              sequence <- match(title_text, input$titles)
+              title_id <- titles_data$id[titles_data$title_text == title_text]
+              dbExecute(
+                conn,
+                "INSERT INTO report_titles (report_id, title_id, sequence) VALUES (?, ?, ?)",
+                params = list(report_id, title_id, sequence)
+              )
+            }
           }
           
           # Update footnotes
-          dbExecute(pool, "DELETE FROM report_footnotes WHERE report_id = ?", 
-                    params = list(report_id))
-          for (footnote_text in input$footnotes) {
-            sequence <- match(footnote_text, input$footnotes)
-            dbExecute(
-              pool,
-              "INSERT INTO report_footnotes (report_id, footnote_id, sequence) 
-           SELECT ?, id, ? FROM footnotes WHERE footnote_text = ?",
-              params = list(report_id, sequence, footnote_text)
-            )
-          }
+          dbExecute(conn, "DELETE FROM report_footnotes WHERE report_id = ?", 
+                   params = list(report_id))
           
-          dbExecute(pool, "COMMIT")
-          refresh_trigger(refresh_trigger() + 1)
-          showNotification("Report updated successfully", type = "message")
-        }, error = function(e) {
-          dbExecute(pool, "ROLLBACK")
-          showNotification(paste("Error:", e$message), type = "error")
+          if (!is.null(input$footnotes)) {
+            for (footnote_text in input$footnotes) {
+              sequence <- match(footnote_text, input$footnotes)
+              footnote_id <- footnotes_data$id[footnotes_data$footnote_text == footnote_text]
+              dbExecute(
+                conn,
+                "INSERT INTO report_footnotes (report_id, footnote_id, sequence) VALUES (?, ?, ?)",
+                params = list(report_id, footnote_id, sequence)
+              )
+            }
+          }
         })
         
+        show_toast(
+          title = "Success",
+          type = "success",
+          text = "Report updated successfully!",
+          position = "top-end"
+        )
+        
         removeModal()
-      }
+      }, error = function(e) {
+        show_toast(
+          title = "Error",
+          type = "error",
+          text = paste("Error updating report:", e$message),
+          position = "top-end"
+        )
+      })
     })
-    
+
+    # Delete Button Handler
+    observeEvent(input$delete, {
+      if (is.null(input$table_rows_selected)) {
+        show_toast(
+          title = "Information",
+          type = "info",
+          text = "Please select a record to delete.",
+          position = "center"
+        )
+        return()
+      }
+      selected <- input$table_rows_selected
+      report <- data()[selected, ]
+      
+      showModal(modalDialog(
+        title = div(icon("trash"), "Delete Report"),
+        div(
+          "Are you sure you want to delete this report?",
+          tags$br(), tags$br(),
+          tags$strong("Report Details:"),
+          tags$br(),
+          sprintf("Type: %s", report$report_type),
+          tags$br(),
+          sprintf("Key: %s", report$report_key),
+          tags$br(),
+          sprintf("Category: %s", report$category_name),
+          tags$br(),
+          sprintf("Sub-Category: %s", report$sub_category_name)
+        ),
+        footer = div(
+          class = "modal-footer",
+          modalButton("Cancel", icon = icon("times")),
+          actionButton(
+            ns("confirm_delete"),
+            "Delete Report",
+            class = "btn btn-danger",
+            icon = icon("trash")
+          )
+        ),
+        size = "m",
+        easyClose = TRUE
+      ))
+    })
+
+    # Delete Report Handler
+    observeEvent(input$confirm_delete, {
+      tryCatch({
+        selected_row <- input$table_rows_selected
+        report_id <- data()[selected_row, "id"]
+        
+        poolWithTransaction(pool, function(conn) {
+          # Delete related records first
+          dbExecute(conn, "DELETE FROM report_titles WHERE report_id = ?", 
+                   params = list(report_id))
+          dbExecute(conn, "DELETE FROM report_footnotes WHERE report_id = ?", 
+                   params = list(report_id))
+          
+          # Delete main report
+          dbExecute(conn, "DELETE FROM reports WHERE id = ?", 
+                   params = list(report_id))
+        })
+        
+        show_toast(
+          title = "Success",
+          type = "success",
+          text = "Report deleted successfully!",
+          position = "top-end"
+        )
+        
+        removeModal()
+      }, error = function(e) {
+        show_toast(
+          title = "Error",
+          type = "error",
+          text = paste("Error deleting report:", e$message),
+          position = "top-end"
+        )
+      })
+    })
+
+
+
   })
-}
+}    

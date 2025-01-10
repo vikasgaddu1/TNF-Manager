@@ -1,81 +1,51 @@
 # Define the datasetTrackerServer module
-datasetTrackerServer <- function(id, pool, reporting_effort, dataset_type, refresh_trigger,reporting_effort_label) {
+datasetTrackerServer <- function(id, pool, reporting_effort, ds_type, tables_data,reporting_effort_label) {
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
     
     # Reactive tracker data
     tracker_data <- reactive({
-      req(reporting_effort())
-      refresh_trigger()
+      req(reporting_effort(), tables_data)
       
-      query <- sprintf(
-        "
-    SELECT
-      rpt.id,
-      ds.dataset_type,
-      ds.dataset_name,
-      ds.dataset_label,
-      ds.category_name,
-      prod.username AS production_programmer,
-      qc.username AS qc_programmer,
-      rpt.assign_date,
-      rpt.due_date,
-      rpt.priority,
-      rpt.status
-    FROM report_programming_tracker rpt
-    INNER JOIN datasets ds
-      ON rpt.report_id = ds.id
-      AND rpt.report_type = ds.dataset_type
-    LEFT JOIN users prod
-      ON rpt.production_programmer_id = prod.id
-    LEFT JOIN users qc
-      ON rpt.qc_programmer_id = qc.id
-    WHERE rpt.report_type = '%s' and rpt.reporting_effort_id = %d
-    ORDER BY rpt.priority DESC, rpt.assign_date DESC;",
-        dataset_type, as.integer(reporting_effort())
-      )
-      
-      
-      data <- tryCatch({
-        dbGetQuery(pool, query)
-      }, error = function(e) {
-        showNotification(paste("Error loading tracker data:", e$message), type = "error")
-        NULL
-      })
-      
-      if (!is.null(data)) {
-        data$priority <- as.integer(data$priority)  # Convert priority to integer
-        data$report_type <- data$dataset_type  # Add report_type column
-      }
-      
+      data <- tables_data$report_programming_tracker() %>%
+        dplyr::filter(reporting_effort_id == reporting_effort(), report_type == ds_type) %>%
+        dplyr::inner_join(tables_data$datasets(), join_by(report_id == id, report_type == dataset_type)) %>%
+        dplyr::left_join(
+          tables_data$users() %>% dplyr::select(id, username ) %>% dplyr::rename(production_programmer = username),
+          by = c("production_programmer_id" = "id")) %>%
+        dplyr::left_join(
+          tables_data$users() %>% dplyr::select(id, username) %>% dplyr::rename(qc_programmer = username),
+          by = c("qc_programmer_id" = "id"))  %>%
+        mutate(priority = as.integer(priority)) %>%
+        dplyr::select(
+          id,
+          report_type,
+          dataset_name,
+          dataset_label,
+          category_name,
+          production_programmer,
+          qc_programmer,
+          assign_date,
+          due_date,
+          priority,
+          status
+        ) %>%
+        dplyr::arrange(desc(priority), desc(assign_date))
       data
     })
-    
     # Server for programming efforts
     programmingEffortServer("programming_effort", tracker_data, reactive(input$column_selection))
     
-    production_programmers <- reactive({
-      tryCatch({
-        refresh_trigger()
-        dbGetQuery(pool, "SELECT id, username FROM users;")
-      }, error = function(e) {
-        showNotification(paste("Error loading production programmers:", e$message),
-                         type = "error")
-        NULL
-      })
+    production_programmers <- reactive({  
+      tables_data$users() %>%
+        dplyr::select(id, username)
     })
     
     qc_programmers <- reactive({
-      tryCatch({
-        refresh_trigger()
-        dbGetQuery(pool, "SELECT id, username FROM users;")
-      }, error = function(e) {
-        showNotification(paste("Error loading QC programmers:", e$message),
-                         type = "error")
-        NULL
-      })
+      tables_data$users() %>%
+        dplyr::select(id, username)
     })
-    
+
     observeEvent(tracker_data(), {
       col_names <- colnames(tracker_data())
       updateCheckboxGroupInput(
@@ -84,8 +54,7 @@ datasetTrackerServer <- function(id, pool, reporting_effort, dataset_type, refre
         choices = col_names,
         selected = c(
           "id",
-          "report_type",
-          "dataset_type"
+          "report_type"
         ) # Default hidden column
       )
     })
@@ -93,13 +62,18 @@ datasetTrackerServer <- function(id, pool, reporting_effort, dataset_type, refre
     # Download handler for tracker data
     output$download_tracker <- downloadHandler(
       filename = function() {
-        paste0(dataset_type,"_TRACKER_", reporting_effort_label(), "_", Sys.Date(), ".xlsx")
+        paste0(ds_type,"_TRACKER_", reporting_effort_label(), "_", Sys.Date(), ".xlsx")
       },
       content = function(file) {
         df <- tracker_data()
         
         if (is.null(df) || nrow(df) == 0) {
-          showNotification("No data available to download.", type = "warning")
+          show_toast(
+            title = "Download",
+            type = "info",
+            text = "No data available to download.",
+            position = "center"
+          )
           return(NULL)
         }
         
@@ -111,8 +85,6 @@ datasetTrackerServer <- function(id, pool, reporting_effort, dataset_type, refre
     output$tracker_table <- renderDT({
       req(tracker_data())
       df <- tracker_data()
-      
-      #print(names(df))
       
       if (is.null(df) || nrow(df) == 0) {
         return(DT::datatable(data.frame(Message = "No data found")))
@@ -133,7 +105,7 @@ datasetTrackerServer <- function(id, pool, reporting_effort, dataset_type, refre
         options = list(pageLength = 10, autoWidth = TRUE, columnDefs = col_defs),
         colnames = c(
           "ID" = "id",
-          "Dataset Type" = "dataset_type",
+          "Dataset Type" = "report_type",
           "Category" = "category_name",
           "Dataset Name" = "dataset_name",
           "Dataset Label" = "dataset_label",
@@ -174,7 +146,12 @@ datasetTrackerServer <- function(id, pool, reporting_effort, dataset_type, refre
       selected_row <- input$tracker_table_rows_selected
       
       if (length(selected_row) == 0) {
-        showNotification("Please select a row before editing.", type = "warning")
+        show_toast(
+          title = "Edit",
+          type = "info",
+          text = "Please select a row before editing.",
+          position = "center"
+        )
         return()
       }
       
@@ -237,13 +214,11 @@ datasetTrackerServer <- function(id, pool, reporting_effort, dataset_type, refre
             dateInput(
               ns("assign_date"),
               "Assign Date:",
-              value = ifelse(
-                is.na(row_data$assign_date),
-                Sys.Date(),
-                as.Date(row_data$assign_date)
-              ),
-              format = "yyyy-mm-dd"
-            ),
+              value = if(is.na(row_data$assign_date)) {
+                Sys.Date()
+              } else {
+                as.Date(row_data$assign_date, format = "%Y-%m-%d")
+              }),
             selectInput(
               ns("status"),
               "Status:",
@@ -269,12 +244,11 @@ datasetTrackerServer <- function(id, pool, reporting_effort, dataset_type, refre
             dateInput(
               ns("due_date"),
               "Due Date:",
-              value = ifelse(
-                is.na(row_data$due_date),
-                Sys.Date() + 7,
-                as.Date(row_data$due_date)
-              ),
-              format = "yyyy-mm-dd"
+              value = if(is.na(row_data$due_date)) {
+                Sys.Date() + 7
+              } else {
+                as.Date(row_data$due_date, format = "%Y-%m-%d")
+              }
             ),
             selectInput(
               ns("priority"),
@@ -303,13 +277,22 @@ datasetTrackerServer <- function(id, pool, reporting_effort, dataset_type, refre
       status <- input$status
       
       if (prod_id == qc_id) {
-        showNotification("Production and QC programmer cannot be the same person.",
-                         type = "warning")
+        show_toast(
+          title = "Edit",
+          type = "info",
+          text = "Production and QC programmer cannot be the same person.",
+          position = "center"
+        )
         return()
       }
       
       if (due_date <= assign_date) {
-        showNotification("Due date must be after the assign date.", type = "warning")
+        show_toast(
+          title = "Edit",
+          type = "info",
+          text = "Due date must be after the assign date.",
+          position = "center"
+        )
         return()
       }
       
@@ -327,14 +310,21 @@ datasetTrackerServer <- function(id, pool, reporting_effort, dataset_type, refre
           params = list(prod_id, qc_id, as.character(assign_date), as.character(due_date), as.integer(priority), status, row_data$id)
         )
         
-        showNotification("Record updated successfully.", type = "message")
+        show_toast(
+          title = "Edit",
+          type = "success",
+          text = "Record updated successfully.",
+          position = "center"
+        )
         removeModal()
-        refresh_trigger(refresh_trigger() + 1)
       }, error = function(e) {
-        showNotification(paste("Error updating record:", e$message), type = "error")
+        show_toast(
+          title = "Edit",
+          type = "error",
+          text = paste("Error updating record:", e$message),
+          position = "center"
+        )
       })
     })
   })
-  
-  return(refresh_trigger)
-}
+  }

@@ -1,41 +1,16 @@
-programmingTrackerServer <- function(id, pool, tabs_input) {
+programmingTrackerServer <- function(id, pool, tables_data) {
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
     
-    # Trigger to refresh data
-    refresh_trigger <- reactiveVal(0)
-    
     # Load Reporting Efforts into dropdown
     reporting_efforts <- reactive({
-      refresh_trigger()
-      tryCatch({
-        dbGetQuery(
-          pool,
-          "SELECT id,
-              study || '_' || database_release || '_' || reporting_effort AS label
-           FROM reporting_efforts;"
-        )
-      }, error = function(e) {
-        showNotification(paste("Error loading reporting efforts:", e$message),
-                         type = "error")
-        NULL
-      })
+      tables_data$reporting_efforts() %>%
+        dplyr::mutate(label = paste(study, database_release, reporting_effort, sep = "_"))
     })
-    
-    
-    # Auto-refresh when tab is selected
-    observeEvent(tabs_input(), {
-      if (tabs_input() == "tracker") {
-        refresh_trigger(refresh_trigger() + 1)
-        showNotification("Refreshing tracker data",
-                         type = "message",
-                         duration = 1)
-      }
-    }, ignoreInit = TRUE)
-    
+      
 
     # Load Reporting Efforts into dropdown
-    observeEvent(refresh_trigger(), {
+    observe({
       req(reporting_efforts())
       current_effort <- isolate(input$reporting_effort)
       choices <- setNames(reporting_efforts()$id, reporting_efforts()$label)
@@ -60,9 +35,9 @@ programmingTrackerServer <- function(id, pool, tabs_input) {
         dplyr::pull(label)
     })
     
-    refresh_trigger <- tflTrackerServer("tfl_tracker", pool, reactive(input$reporting_effort),refresh_trigger, selected_reporting_effort_label)
-    refresh_trigger <- datasetTrackerServer("sdtm_tracker", pool, reactive(input$reporting_effort),"SDTM",refresh_trigger, selected_reporting_effort_label)
-    refresh_trigger <- datasetTrackerServer("adam_tracker", pool, reactive(input$reporting_effort),"ADaM",refresh_trigger, selected_reporting_effort_label)
+    refresh_trigger <- tflTrackerServer("tfl_tracker", pool, reactive(input$reporting_effort),tables_data, selected_reporting_effort_label)
+    refresh_trigger <- datasetTrackerServer("sdtm_tracker", pool, reactive(input$reporting_effort),"SDTM",tables_data, selected_reporting_effort_label)
+    refresh_trigger <- datasetTrackerServer("adam_tracker", pool, reactive(input$reporting_effort),"ADaM",tables_data, selected_reporting_effort_label)
     
   })
 }

@@ -1,37 +1,16 @@
-associateTask_RE_Server <- function(id, pool, tabs_input) {
+associateTask_RE_Server <- function(id, pool, tables_data) {
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
     
-    # Trigger to refresh data
-    refresh_trigger <- reactiveVal(0)
-    
     # Define reporting_efforts as a reactive expression
     reporting_efforts <- reactive({
-      refresh_trigger()
-      tryCatch({
-        dbGetQuery(
-          pool,
-          "SELECT id,
-              study || '_' || database_release || '_' || reporting_effort AS label
-           FROM reporting_efforts;"
-        )
-      }, error = function(e) {
-        showNotification(paste("Error loading reporting efforts:", e$message),
-                         type = "error")
-        NULL
-      })
+      tables_data$reporting_efforts() %>%
+        dplyr::mutate(label = paste(study, database_release, reporting_effort, sep = "_")) %>%
+        dplyr::select(id, label)
     })
-    
-    # Auto-refresh reporting efforts when tab is selected
-    observeEvent(tabs_input(), {
-      if (tabs_input() == "re_reports") {
-        refresh_trigger(refresh_trigger() + 1)
-        showNotification("Refreshing reporting efforts", type = "message", duration = 1)
-      }
-    }, ignoreInit = TRUE)
-    
+      
     # Load Reporting Efforts into dropdown
-    observeEvent(refresh_trigger(), {
+    observe({
       req(reporting_efforts())
       current_effort <- isolate(input$reporting_effort)
       choices <- setNames(reporting_efforts()$id, reporting_efforts()$label)
@@ -54,33 +33,29 @@ associateTask_RE_Server <- function(id, pool, tabs_input) {
       reporting_efforts() %>%
         dplyr::filter(id == input$reporting_effort) %>%
         dplyr::pull(label)
-
     })
     
-    # Pass reporting effort id and label to at_tfl_Server
-    refresh_trigger <- at_tfl_Server(
+    # Pass reporting effort id and label to child modules
+    at_tfl_Server(
       "at_tfl",
-      pool,
+      tables_data,
       reactive(input$reporting_effort),
-      selected_reporting_effort_label,
-      refresh_trigger
+      selected_reporting_effort_label
     )
     
-    refresh_trigger <- at_dataset_Server(
+    at_dataset_Server(
       "at_sdtm",
-      pool,
+      tables_data,
       reactive(input$reporting_effort),
       selected_reporting_effort_label,
-      refresh_trigger,
       "SDTM"
     )
     
-    refresh_trigger <- at_dataset_Server(
+    at_dataset_Server(
       "at_adam",
-      pool,
+      tables_data,
       reactive(input$reporting_effort),
       selected_reporting_effort_label,
-      refresh_trigger,
       "ADaM"
     )
   })

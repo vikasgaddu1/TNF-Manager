@@ -1,117 +1,92 @@
-at_tfl_Server <- function(id, pool, reporting_effort,reporting_effort_label, refresh_trigger) {
+at_tfl_Server <- function(id, tables_data, reporting_effort, reporting_effort_label) {
   moduleServer(
     id,
     function(input, output, session) {
       ns <- session$ns
       
-      # Trigger to refresh data
-      # refresh_trigger <- reactiveVal(0)
-      
-      observeEvent(refresh_trigger(), {
-        tryCatch({
-          # Step 1: Insert Missing Records
-          dbExecute(pool, "
-      INSERT INTO report_programming_tracker (
-          reporting_effort_id, 
-          report_id, 
-          report_type,
-          production_programmer_id, 
-          qc_programmer_id, 
-          assign_date, 
-          due_date, 
-          priority, 
-          status
-      )
-      SELECT 
-          rer.reporting_effort_id,
-          rer.report_id,
-          rer.report_type,
-          NULL,  -- Default value for production_programmer_id
-          NULL,  -- Default value for qc_programmer_id
-          NULL,  -- Default assign_date
-          NULL,  -- Default due_date
-          1,     -- Default priority (lowest)
-          'Not Started'  -- Default status
-      FROM 
-          reporting_effort_reports rer
-      LEFT JOIN 
-          report_programming_tracker rpt
-      ON 
-          rer.reporting_effort_id = rpt.reporting_effort_id
-          AND rer.report_id = rpt.report_id
-          AND rer.report_type = rpt.report_type
-      WHERE 
-          rpt.report_id IS NULL and rer.report_type IN ('Table', 'Listing', 'Figure') ;
-    ")
-          
-          # Step 2: Delete Orphaned Records
-          dbExecute(pool, "
-            DELETE FROM report_programming_tracker
-              WHERE report_type IN ('Table', 'Listing', 'Figure')  and  NOT EXISTS (
-                SELECT 1
-                 FROM reporting_effort_reports
-                  WHERE reporting_effort_reports.reporting_effort_id = report_programming_tracker.reporting_effort_id
-                        AND reporting_effort_reports.report_id = report_programming_tracker.report_id AND
-                        reporting_effort_reports.report_type = report_programming_tracker.report_type AND
-                        report_type IN ('Table', 'Listing', 'Figure')
-
-          );
-    ")
-          
-          showNotification("Tracker data synced successfully.", type = "message")
-          
-        }, error = function(e) {
-          showNotification(paste("Error ensuring tracker data consistency:", e$message), type = "error")
-        })
-      })
-      
       # Reactive to fetch and cache TFL data from the database
       tfl_data <- reactive({
         req(reporting_effort())
-        # cat("Reporting Effort ID: ", reporting_effort(), "\n")
-        refresh_trigger() # Depend on refresh_trigger for updates
         
-        tryCatch({
-          dbGetQuery(
-            pool,
-            paste(
-              "SELECT r.id, 
-               r.report_key AS 'Report Key', 
-               r.title_key as 'Title Key', 
-               r.report_type AS 'Report Type', 
-               c.category_name AS 'Category', 
-               sc.sub_category_name AS 'Subcategory', 
-               r.report_ich_number AS 'ICH Number', 
-               p.population_text AS 'Population',
-               (SELECT GROUP_CONCAT(t2.title_text, '@#')
-                FROM report_titles rt2 
-                JOIN titles t2 ON rt2.title_id = t2.id 
-                WHERE rt2.report_id = r.id) AS 'Title',
-               (SELECT GROUP_CONCAT(f2.footnote_text, '@#')
-                FROM report_footnotes rf2 
-                JOIN footnotes f2 ON rf2.footnote_id = f2.id 
-                WHERE rf2.report_id = r.id) AS 'Footnotes',
-               CASE WHEN rer.reporting_effort_id IS NOT NULL THEN 1 ELSE 0 END AS Selected
-                  FROM reports r
-                  LEFT JOIN categories c ON r.report_category_id = c.id
-                  LEFT JOIN sub_categories sc ON r.report_sub_category_id = sc.id
-                  LEFT JOIN populations p ON r.population_id = p.id
-                  LEFT JOIN reporting_effort_reports rer 
-                       ON r.id = rer.report_id 
-                       AND rer.reporting_effort_id = ", reporting_effort(), 
-                       "AND rer.report_type = r.report_type",
-                       "WHERE r.report_type IN ('Table', 'Listing', 'Figure')
-                  GROUP BY r.id;"
-            )
-          ) %>%
-            dplyr::mutate(Selected = as.logical(Selected)) %>%
-            dplyr::select(Selected, everything()) %>%
-            dplyr::arrange(`Report Type`, Category, Subcategory, Population, `ICH Number`)
+        # Debugging: Print the reporting effort
+        # cat("Reporting Effort ID:", reporting_effort(), "\n")
 
-        }, error = function(e) {
-          showNotification(paste("Error loading reports:", e$message), type = "error")
-          NULL
-        })
+        # Initial reports data
+        reports <- tables_data$reports()
+        # cat("Initial number of reports:", nrow(reports), "\n")
+        
+        # Join with categories
+        reports <- reports %>%
+          dplyr::left_join(tables_data$categories(), join_by(report_category_id == id))
+        # cat("Number of reports after joining categories:", nrow(reports), "\n")
+        
+        # Join with sub_categories
+        reports <- reports %>%
+          dplyr::left_join(tables_data$sub_categories(), join_by(report_sub_category_id == id))
+        # cat("Number of reports after joining sub_categories:", nrow(reports), "\n")
+        
+        # Join with populations
+        reports <- reports %>%
+          dplyr::left_join(tables_data$populations(), join_by(population_id == id))
+        # cat("Number of reports after joining populations:", nrow(reports), "\n")
+        
+        # Filter and join with reporting_effort_reports
+        reports <- reports %>%
+          dplyr::left_join(
+            tables_data$reporting_effort_reports() %>%
+              dplyr::filter(reporting_effort_id == reporting_effort()), 
+            join_by(id == report_id, report_type == report_type)
+          )
+        # cat("Number of reports after joining reporting_effort_reports:", nrow(reports), "\n")
+        
+        # Filter and mutate
+        reports <- reports %>%
+          dplyr::filter(report_type %in% c("Table", "Listing", "Figure")) %>%
+          dplyr::mutate(Selected = !is.na(reporting_effort_id) & reporting_effort_id == reporting_effort())
+        
+        # cat("Final number of reports after filtering:", nrow(reports), "\n")
+        
+        # Process Titles
+        titles <- tables_data$report_titles() %>%
+          dplyr::left_join(tables_data$titles(), join_by(title_id == id)) %>%
+          dplyr::group_by(report_id) %>%
+          dplyr::summarise(Title = paste(title_text, collapse = "@#"))
+        
+        # Debugging: Print the number of titles processed
+        # cat("Number of Titles processed:", nrow(titles), "\n")
+        
+        # Process Footnotes
+        footnotes <- tables_data$report_footnotes() %>%
+          dplyr::left_join(tables_data$footnotes(), join_by(footnote_id == id)) %>%
+          dplyr::group_by(report_id) %>%
+          dplyr::summarise(Footnotes = paste(footnote_text, collapse = "@#"))
+        
+        # Debugging: Print the number of footnotes processed
+        # cat("Number of Footnotes processed:", nrow(footnotes), "\n")
+        
+        # Combine all data
+        reports <- reports %>%
+          dplyr::left_join(titles, join_by(id == report_id)) %>%
+          dplyr::left_join(footnotes, join_by(id == report_id)) %>%
+          dplyr::select(
+            Selected,
+            id,
+            report_key,
+            title_key,
+            report_type,
+            category_name,
+            sub_category_name,
+            report_ich_number,
+            population_text,
+            Title,
+            Footnotes
+          ) %>%
+          dplyr::arrange(report_type, category_name, sub_category_name, population_text, report_ich_number)
+        
+        # Debugging: Print the final number of reports
+        # cat("Final number of Reports:", nrow(reports), "\n")
+        
+        reports
       })
       
       # Reactive to filter TFL data based on dropdowns and search input
@@ -123,29 +98,28 @@ at_tfl_Server <- function(id, pool, reporting_effort,reporting_effort_label, ref
         # Apply dropdown filters
         if (!is.null(input$report_type) && input$report_type != "All") {
           filtered_data <- filtered_data %>%
-            dplyr::filter(`Report Type` == input$report_type)
+            dplyr::filter(report_type == input$report_type)
         }
         
         if (!is.null(input$category) && input$category != "All") {
           filtered_data <- filtered_data %>%
-            dplyr::filter(Category == input$category)
+            dplyr::filter(category_name == input$category)
         }
         
         if (!is.null(input$subcategory) && input$subcategory != "All") {
           filtered_data <- filtered_data %>%
-            dplyr::filter(Subcategory == input$subcategory)
+            dplyr::filter(sub_category_name == input$subcategory)
         }
         
         # Apply search filter
         if (!is.null(input$search) && input$search != "") {
           filtered_data <- filtered_data %>%
-            dplyr::filter_at(vars(`Report Key`, `Report Type`,`ICH Number`, `Category`, `Subcategory`, `Population`, `Title`, `Footnotes`),
+            dplyr::filter_at(vars(report_key, report_type, report_ich_number, category_name, sub_category_name, population_text, Title, Footnotes),
                              any_vars(stringr::str_detect(., stringr::fixed(input$search, ignore_case = TRUE))))
         }
         
         filtered_data
       })
-      
       
       # Dynamically update dropdowns
       output$report_type_select <- renderUI({
@@ -153,7 +127,7 @@ at_tfl_Server <- function(id, pool, reporting_effort,reporting_effort_label, ref
         selectInput(
           ns("report_type"),
           label = "Report Type",
-          choices = c("All", unique(tfl_data()$`Report Type`)),
+          choices = c("All", unique(tfl_data()$report_type)),
           selected = "All"
         )
       })
@@ -163,7 +137,7 @@ at_tfl_Server <- function(id, pool, reporting_effort,reporting_effort_label, ref
         selectInput(
           ns("category"),
           label = "Category",
-          choices = c("All", unique(tfl_data()$Category)),
+          choices = c("All", unique(tfl_data()$category_name)),
           selected = "All"
         )
       })
@@ -173,20 +147,19 @@ at_tfl_Server <- function(id, pool, reporting_effort,reporting_effort_label, ref
         selectInput(
           ns("subcategory"),
           label = "Subcategory",
-          choices = c("All", unique(tfl_data()$Subcategory)),
+          choices = c("All", unique(tfl_data()$sub_category_name)),
           selected = "All"
         )
       })
-      
       
       # Render rHandsontable
       output$reports_table <- renderRHandsontable({
         req(reports())
         # Remove id from display but keep it for backend operations
         reports_data <- reports() %>%
-          select(id,Selected,`Report Type`, `Report Key`,`Title Key`,  Category, Subcategory, `ICH Number`, Population, Title, Footnotes) %>%
-          arrange(`Report Type`,`Report Key`, `Title Key`,Category, Subcategory, Population, `ICH Number`)
-
+          select(id, Selected, report_type, report_key, title_key, category_name, sub_category_name, report_ich_number, population_text, Title, Footnotes) %>%
+          arrange(report_type, report_key, title_key, category_name, sub_category_name, population_text, report_ich_number)
+        
         rhandsontable(
           reports_data,
           useTypes = TRUE, # Enable type detection
@@ -194,19 +167,18 @@ at_tfl_Server <- function(id, pool, reporting_effort,reporting_effort_label, ref
         ) %>%
           hot_col("id", readOnly = TRUE, width = 1) %>%
           hot_col("Selected", type = "checkbox", halign = "center") %>% # Make Selected column a checkbox
-          hot_col("Report Type", readOnly = TRUE, halign = "left") %>%
-          hot_col("Report Key", readOnly = TRUE, halign = "left") %>%
-          hot_col("Title Key", readOnly = TRUE, halign = "left") %>%
-          hot_col("Category", readOnly = TRUE, halign = "left") %>%
-          hot_col("Subcategory", readOnly = TRUE, halign = "left") %>%
-          hot_col("ICH Number", readOnly = TRUE, halign = "center") %>%
-          hot_col("Population", readOnly = TRUE, halign = "left") %>%
+          hot_col("report_type", readOnly = TRUE, halign = "left") %>%
+          hot_col("report_key", readOnly = TRUE, halign = "left") %>%
+          hot_col("title_key", readOnly = TRUE, halign = "left") %>%
+          hot_col("category_name", readOnly = TRUE, halign = "left") %>%
+          hot_col("sub_category_name", readOnly = TRUE, halign = "left") %>%
+          hot_col("report_ich_number", readOnly = TRUE, halign = "center") %>%
+          hot_col("population_text", readOnly = TRUE, halign = "left") %>%
           hot_col("Title", readOnly = TRUE, halign = "left") %>%
           hot_col("Footnotes", readOnly = TRUE, halign = "left") %>%
           hot_table(contextMenu = FALSE)
       })
       
-
       output$download_tnf <- downloadHandler(
         filename = function() {
           req(reporting_effort_label()) # Ensure the reactive value is available
@@ -221,7 +193,12 @@ at_tfl_Server <- function(id, pool, reporting_effort,reporting_effort_label, ref
           
           # Check if data is available
           if (nrow(df) == 0) {
-            showNotification("No data available to download.", type = "warning")
+            show_toast(
+              title = "Warning",
+              type = "warning",
+              text = "No data available to download.",
+              position = "top-end"
+            )
             return(NULL)
           }
           
@@ -229,9 +206,6 @@ at_tfl_Server <- function(id, pool, reporting_effort,reporting_effort_label, ref
           openxlsx::write.xlsx(df, file)
         }
       )
-      
-      
-
       
       # Save Selection
       observeEvent(input$save_selection, {
@@ -241,7 +215,7 @@ at_tfl_Server <- function(id, pool, reporting_effort,reporting_effort_label, ref
           # Retrieve edited data
           edited_data <- hot_to_r(input$reports_table)
           
-          #merge with tfl_data and get previously selected values using dplyr join_by
+          # Merge with tfl_data and get previously selected values using dplyr join_by
           edited_data <- dplyr::left_join(
             tfl_data(), # All records from tfl_data
             edited_data %>% dplyr::select(id, Selected), # Selected column from edited_data
@@ -252,25 +226,17 @@ at_tfl_Server <- function(id, pool, reporting_effort,reporting_effort_label, ref
             ) %>%
             dplyr::select(-Selected.x, -Selected.y) # Clean up temporary columns
           
-          
-          
-          # Log edited data for debugging
-          # cat("Edited Data:\n")
-          # print(edited_data)
-          
           # Standardize column names (replace space with underscore)
           edited_data <- edited_data %>%
             dplyr::rename(report_type = `Report Type`) # Adjust column name here
           
           # Delete existing associations for the reporting effort
-          dbExecute(pool, paste(
-            "DELETE FROM reporting_effort_reports WHERE reporting_effort_id = ",
-            reporting_effort(), " and report_type IN ('Table', 'Listing', 'Figure');"
-          ))
-          # dbExecute(pool, paste(
-          #   "DELETE FROM report_programming_tracker WHERE reporting_effort_id = ",
-          #   reporting_effort(), " and report_type IN ('Table', 'Listing', 'Figure');"
-          # ))
+          poolWithTransaction(pool, function(conn) {
+            dbExecute(conn, paste(
+              "DELETE FROM reporting_effort_reports WHERE reporting_effort_id = ",
+              reporting_effort(), " and report_type IN ('Table', 'Listing', 'Figure');"
+            ))
+          })
           
           # Insert new associations for selected rows
           selected_reports <- edited_data %>%
@@ -288,36 +254,27 @@ at_tfl_Server <- function(id, pool, reporting_effort,reporting_effort_label, ref
                 collapse = ","
               )
             )
-            dbExecute(pool, query_reporting_effort)
-            
-            # Prepare query for report_programming_tracker
-          #   query_tracker <- paste(
-          #     "INSERT INTO report_programming_tracker (reporting_effort_id, report_id, report_type) VALUES ",
-          #     paste(
-          #       sprintf("(%s, %s, '%s')", 
-          #               reporting_effort(), 
-          #               selected_reports$id, 
-          #               selected_reports$report_type),
-          #       collapse = ","
-          #     )
-          #   )
-          #   dbExecute(pool, query_tracker)
-           }
-          
-          # cat("After insertion\n")
-          # # Log the inserted data for debugging
-          # rpt <- dbGetQuery(pool, "SELECT * FROM report_programming_tracker;")
-          # print(rpt)
+            poolWithTransaction(pool, function(conn) {
+              dbExecute(conn, query_reporting_effort)
+            })
+          }
           
           # Refresh trigger
-          refresh_trigger(refresh_trigger() + 1)
-          showNotification("Selection saved successfully.", type = "message")
+          show_toast(
+            title = "Success",
+            type = "success",
+            text = "Selection saved successfully!",
+            position = "top-end"
+          )
         }, error = function(e) {
-          showNotification(paste("Error during save operation:", e$message), type = "error")
+          show_toast(
+            title = "Error",
+            type = "error",
+            text = "Error during save operation",
+            position = "top-end"
+          )
         })
       })
-      
     }
   )
-  return(refresh_trigger)
 }

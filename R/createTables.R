@@ -5,7 +5,7 @@ createTables <- function(pool) {
     "CREATE TABLE IF NOT EXISTS datasets (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       dataset_type TEXT NOT NULL,
-      category_name TEXT UNIQUE NOT NULL,
+      category_name TEXT NOT NULL,
       dataset_name TEXT NOT NULL,
       dataset_label TEXT NOT NULL,
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP

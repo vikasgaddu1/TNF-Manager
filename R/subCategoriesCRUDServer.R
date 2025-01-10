@@ -1,47 +1,23 @@
-subCategoriesCRUDServer <- function(id, pool,tabs_input) {
+subCategoriesCRUDServer <- function(id, pool, tabs_input, tables_data) {
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
-    
-    # Trigger to refresh data
-    refresh_trigger <- reactiveVal(0)
 
-    # Auto-refresh categories when tab is selected
-    observeEvent(tabs_input(), {
-      if (tabs_input() == "Sub Categories") {
-        # Add your logic here for when "sub_categories" is selected
-        refresh_trigger(refresh_trigger() + 1)
-        showNotification("Refreshing sub-categories", type = "message", duration = 1)
-      }
-    }, ignoreInit = TRUE)
-   
-    
-    # Using dplyr if you prefer:
+    categories <- reactive(tables_data$categories())
+    subCategories <- reactive(tables_data$sub_categories())
+
     data <- reactive({
-      refresh_trigger()
+      req(categories(), subCategories())
       
-      tbl_categories <- dbReadTable(pool, "categories") %>%
-        select(id, category_name)
-      tbl_sub_categories <- dbReadTable(pool, "sub_categories")
-      
-      tbl_sub_categories %>%
-        left_join(tbl_categories, by = c("category_id" = "id")) %>%
-        select(
-          id,
-          category_id,
-          category_name,
-          sub_category_name,
-          suggested_ich_number,
-          updated_at
-        ) %>%
-        arrange(category_name, sub_category_name) 
-      #%>% 
-      #  filter(!is.na(category_name))
+      data <- subCategories() %>%
+        left_join(categories(), by = c("category_id" = "id")) %>%
+        select(id,
+               category_id,
+               category_name,
+               sub_category_name,
+               suggested_ich_number) %>%
+        arrange(category_name, sub_category_name)
     })
     
-    categories <- reactive({
-      refresh_trigger()
-      dbReadTable(pool, "categories")
-    })
     
     # Add Sub Category
     observeEvent(input$add, {
@@ -81,53 +57,82 @@ subCategoriesCRUDServer <- function(id, pool,tabs_input) {
       ))
     })
     
+    observeEvent(input$sub_category_name, {
+      shinyFeedback::hideFeedback("sub_category_name")
+    })
+    
+    observeEvent(input$suggested_ich_number, {
+      shinyFeedback::hideFeedback("suggested_ich_number")
+    })
+    
     
     observeEvent(input$confirm_add, {
-      req(input$sub_category_name,input$suggested_ich_number)  # Validate input
+      # Validate required fields
+      if (is.null(input$sub_category_name) ||
+          input$sub_category_name == "" ||
+          is.null(input$suggested_ich_number) ||
+          input$suggested_ich_number == "") {
+        # Use shinyFeedback to provide feedback for invalid fields
+        shinyFeedback::feedbackDanger(
+          "sub_category_name",
+          is.null(input$sub_category_name) ||
+            input$sub_category_name == "",
+          "Sub-category name is required."
+        )
+        shinyFeedback::feedbackDanger(
+          "suggested_ich_number",
+          is.null(input$suggested_ich_number) ||
+            input$suggested_ich_number == "",
+          "Suggested ICH number is required."
+        )
+        return()
+      }
       
+      # Proceed with adding logic
       tryCatch({
-        new_sub_category <- data.frame(
-          category_id = input$category_id,
-          sub_category_name = input$sub_category_name,
-          suggested_ich_number = input$suggested_ich_number,
-          stringsAsFactors = FALSE
+        # Use poolWithTransaction for transaction handling
+        poolWithTransaction(pool, function(conn) {
+          dbExecute(
+            conn,
+            "INSERT INTO sub_categories (category_id, sub_category_name, suggested_ich_number) VALUES (?, ?, ?)",
+            params = list(
+              input$category_id,
+              input$sub_category_name,
+              input$suggested_ich_number
+            )
+          )
+        })
+        
+        # Notify success and close the modal
+        show_toast(
+          title = "Add Sub-Category",
+          type = "success",
+          text = "Sub-category added successfully!",
+          position = "top-end"
         )
-        dbWriteTable(
-          pool,
-          "sub_categories",
-          new_sub_category,
-          append = TRUE,
-          row.names = FALSE
-        )
-        
-        # Show success message
-        showNotification("Category added successfully!",
-                         type = "message",
-                         duration = 3)
-        
-        # Refresh data
-        refresh_trigger(refresh_trigger() + 1)
-        
         removeModal()
       }, error = function(e) {
-        showNotification(
-          paste("Error adding category:", e$message),
+        # Handle errors gracefully
+        show_toast(
+          title = "Add Sub-Category",
           type = "error",
-          duration = 5
+          text = paste("Error adding sub-category:", e$message),
+          position = "top-end"
         )
       })
     })
+    
     
     # Edit Category
     observeEvent(input$edit, {
       selected <- input$table_rows_selected
       
       if (length(selected) == 0) {
-        showNotification(
-          "Please select a category to edit",
+        show_toast(
+          title = "Edit Sub-Category",
           type = "warning",
-          duration = 3,
-          closeButton = TRUE
+          text = "Please select a category to edit",
+          position = "center"
         )
         return()
       }
@@ -162,7 +167,7 @@ subCategoriesCRUDServer <- function(id, pool,tabs_input) {
         ),
         footer = div(
           class = "modal-footer",
-          modalButton("Cancel", icon=icon("times")),
+          modalButton("Cancel", icon = icon("times")),
           actionButton(
             ns("confirm_edit"),
             "Save Changes",
@@ -176,31 +181,93 @@ subCategoriesCRUDServer <- function(id, pool,tabs_input) {
     })
     
     observeEvent(input$confirm_edit, {
-      selected <- input$table_rows_selected
-      sub_category_id <- data()[selected, "id"]
-      updated_sub_category <- data.frame(
-        id = sub_category_id,
-        category_id = input$category_id,
-        sub_category_name = input$sub_category_name,
-        suggested_ich_number = input$suggested_ich_number,
-        stringsAsFactors = FALSE
-      )
-      dbExecute(pool, "UPDATE sub_categories SET category_id = ?, sub_category_name = ?, suggested_ich_number = ? WHERE id = ?",
-                params = list(updated_sub_category$category_id, updated_sub_category$sub_category_name, updated_sub_category$suggested_ich_number, updated_sub_category$id))
-      refresh_trigger(refresh_trigger() + 1)
-      removeModal()
+      # Validate required fields
+      if (is.null(input$sub_category_name) ||
+          input$sub_category_name == "" ||
+          is.null(input$suggested_ich_number) ||
+          input$suggested_ich_number == "") {
+        # Use shinyFeedback to provide feedback for invalid fields
+        shinyFeedback::feedbackDanger(
+          "sub_category_name",
+          is.null(input$sub_category_name) ||
+            input$sub_category_name == "",
+          "Sub-category name is required."
+        )
+        shinyFeedback::feedbackDanger(
+          "suggested_ich_number",
+          is.null(input$suggested_ich_number) ||
+            input$suggested_ich_number == "",
+          "Suggested ICH number is required."
+        )
+        return()
+      }
+      
+      # Proceed with editing logic
+      tryCatch({
+        selected <- input$table_rows_selected
+        if (length(selected) == 0) {
+          show_toast(
+            title = "Edit Sub-Category",
+            type = "warning",
+            text = "No row selected for editing.",
+            position = "top-end"
+          )
+          return()
+        }
+        
+        sub_category_id <- data()[selected, "id"]
+        updated_sub_category <- data.frame(
+          id = sub_category_id,
+          category_id = input$category_id,
+          sub_category_name = input$sub_category_name,
+          suggested_ich_number = input$suggested_ich_number,
+          stringsAsFactors = FALSE
+        )
+        
+        # Use poolWithTransaction for transaction handling
+        poolWithTransaction(pool, function(conn) {
+          dbExecute(
+            conn,
+            "UPDATE sub_categories SET category_id = ?, sub_category_name = ?, suggested_ich_number = ? WHERE id = ?",
+            params = list(
+              updated_sub_category$category_id,
+              updated_sub_category$sub_category_name,
+              updated_sub_category$suggested_ich_number,
+              updated_sub_category$id
+            )
+          )
+        })
+        
+        # Notify success and refresh UI
+        show_toast(
+          title = "Edit Sub-Category",
+          type = "success",
+          text = "Sub-category updated successfully!",
+          position = "top-end"
+        )
+        removeModal()
+      }, error = function(e) {
+        # Handle errors gracefully
+        show_toast(
+          title = "Edit Sub-Category",
+          type = "error",
+          text = paste("Error updating sub-category:", e$message),
+          position = "top-end"
+        )
+      })
     })
+    
     
     # Delete Category
     observeEvent(input$delete, {
       selected <- input$table_rows_selected
       
       if (length(selected) == 0) {
-        showNotification(
-          "Please select a sub-category to delete",
+        show_toast(
+          title = "Delete Sub-Category",
           type = "warning",
-          duration = 3,
-          closeButton = TRUE
+          text = "Please select a sub-category to delete",
+          position = "center"
         )
         return()
       }
@@ -220,15 +287,14 @@ subCategoriesCRUDServer <- function(id, pool,tabs_input) {
         ),
         div(
           class = "mb-3",
-          sprintf("Are you sure you want to delete the sub-category '%s'?", 
-                  selected_data$sub_category_name)
+          sprintf(
+            "Are you sure you want to delete the sub-category '%s'?",
+            selected_data$sub_category_name
+          )
         ),
         footer = div(
           class = "modal-footer",
-          modalButton(
-            "Cancel",
-            icon=icon("times")
-          ),
+          modalButton("Cancel", icon = icon("times")),
           actionButton(
             ns("confirm_delete"),
             "Delete Category",
@@ -242,18 +308,41 @@ subCategoriesCRUDServer <- function(id, pool,tabs_input) {
     })
     
     observeEvent(input$confirm_delete, {
-      req(input$table_rows_selected)
-      selected <- input$table_rows_selected
-      sub_category_id <- data()[selected, "id"]
-      dbExecute(pool, "DELETE FROM sub_categories WHERE id = ?", params = list(sub_category_id))
-      refresh_trigger(refresh_trigger() + 1)
-      removeModal()
+      req(input$table_rows_selected) # Ensure a row is selected
+      
+      tryCatch({
+        selected <- input$table_rows_selected
+        sub_category_id <- data()[selected, "id"]
+        
+        # Use poolWithTransaction for transaction handling
+        poolWithTransaction(pool, function(conn) {
+          dbExecute(conn,
+                    "DELETE FROM sub_categories WHERE id = ?",
+                    params = list(sub_category_id))
+        })
+        
+        # Notify the user of success
+        show_toast(
+          title = "Delete Sub-Category",
+          type = "success",
+          text = "Sub-category deleted successfully!",
+          position = "top-end"
+        )
+        
+        removeModal()
+      }, error = function(e) {
+        # Handle errors gracefully
+        show_toast(
+          title = "Delete Sub-Category",
+          type = "error",
+          text = paste("Error deleting sub-category:", e$message),
+          position = "top-end"
+        )
+      })
     })
     
-    # Reresh data
-    observeEvent(input$refresh, {
-      refresh_trigger(refresh_trigger() + 1)
-    })
+    
+    
     
     output$table <- DT::renderDataTable({
       DT::datatable(
@@ -263,19 +352,15 @@ subCategoriesCRUDServer <- function(id, pool,tabs_input) {
           "Category ID" = "category_id",
           "Category" = "category_name",
           "Sub Category" = "sub_category_name",
-          "ICH Number" = "suggested_ich_number",
-          "Last Updated" = "updated_at"
+          "ICH Number" = "suggested_ich_number"
         ),
         selection = "single",
         rownames = FALSE,
         class = 'table table-striped table-bordered',
-        options = list(
-          columnDefs = list(
-            list(
-              targets = c(0, 1,5),  # Hide ID and Category ID columns (0-based index)
-              visible = FALSE
-            )
-          ))
+        options = list(columnDefs = list(list(
+          targets = c(0, 1), # Hide ID and Category ID columns (0-based index)
+          visible = FALSE
+        )))
       )
     })
     
