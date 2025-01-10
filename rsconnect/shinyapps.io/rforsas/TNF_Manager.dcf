@@ -1,11 +1,11 @@
 name: TNF_Manager
-title: TNF_Manager
+title: TNF Manager
 username: rforsas
 account: rforsas
 server: shinyapps.io
 hostUrl: https://api.shinyapps.io/v1
 appId: 13668099
-bundleId: 9611435
+bundleId: 9630283
 url: https://rforsas.shinyapps.io/TNF_Manager/
 version: 1
 asMultiple: FALSE

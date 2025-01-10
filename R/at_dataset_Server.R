@@ -1,4 +1,4 @@
-at_dataset_Server <- function(id, tables_data, reporting_effort, reporting_effort_label, ds_type) {
+at_dataset_Server <- function(id, pool,tables_data, reporting_effort, reporting_effort_label, ds_type) {
   moduleServer(
     id,
     function(input, output, session) {

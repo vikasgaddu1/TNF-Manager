@@ -38,6 +38,7 @@ associateTask_RE_Server <- function(id, pool, tables_data) {
     # Pass reporting effort id and label to child modules
     at_tfl_Server(
       "at_tfl",
+      pool,
       tables_data,
       reactive(input$reporting_effort),
       selected_reporting_effort_label
@@ -45,6 +46,7 @@ associateTask_RE_Server <- function(id, pool, tables_data) {
     
     at_dataset_Server(
       "at_sdtm",
+      pool,
       tables_data,
       reactive(input$reporting_effort),
       selected_reporting_effort_label,
@@ -53,6 +55,7 @@ associateTask_RE_Server <- function(id, pool, tables_data) {
     
     at_dataset_Server(
       "at_adam",
+      pool,
       tables_data,
       reactive(input$reporting_effort),
       selected_reporting_effort_label,

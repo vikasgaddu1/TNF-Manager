@@ -1,4 +1,4 @@
-at_tfl_Server <- function(id, tables_data, reporting_effort, reporting_effort_label) {
+at_tfl_Server <- function(id, pool,tables_data, reporting_effort, reporting_effort_label) {
   moduleServer(
     id,
     function(input, output, session) {
