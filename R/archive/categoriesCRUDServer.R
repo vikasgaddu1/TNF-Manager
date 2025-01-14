@@ -40,7 +40,7 @@ categoriesCRUDServer <- function(id, pool) {
     observeEvent(input$confirm_add, {
       if (is.null(input$category_name) || input$category_name == "") {
         shinyFeedback::showFeedbackDanger(
-          ns("category_name"), "Category name cannot be empty."
+          "category_name", "Category name cannot be empty."
         )
         return()
       }
@@ -49,7 +49,7 @@ categoriesCRUDServer <- function(id, pool) {
       
       if (nchar(input$category_name) < 3) {
         shinyFeedback::showFeedbackDanger(
-          ns("category_name"), "Category name must be at least 3 characters long."
+          "category_name", "Category name must be at least 3 characters long."
         )
         return()
       }
@@ -123,7 +123,7 @@ categoriesCRUDServer <- function(id, pool) {
       
       if (nchar(input$category_name) < 3) {
         shinyFeedback::showFeedbackDanger(
-          ns("category_name"), "Category name must be at least 3 characters long."
+          "category_name", "Category name must be at least 3 characters long."
         )
         return()
       }

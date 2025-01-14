@@ -1,42 +1,96 @@
 tflTrackerServer <- function(id, pool, reporting_effort,tables_data,reporting_effort_label) {
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
+    
+    # refresh trigger
+    refresh_trigger <- reactiveVal(0)
+    
     tracker_data <- reactive({
       req(reporting_effort(), tables_data)
-      
+      refresh_trigger()
       # Use dplyr to merge tables
-      data <- tables_data$report_programming_tracker() %>%
-              dplyr::filter(reporting_effort_id == reporting_effort() & report_type  %in% c('Table', 'Listing', 'Figure')) %>%
-              dplyr::inner_join(tables_data$reporting_efforts(), join_by(reporting_effort_id == id)) %>%
-              dplyr::inner_join(tables_data$reports(), join_by(report_id == id, report_type == report_type)) %>%
-              dplyr::left_join(tables_data$categories(), join_by(report_category_id == id)) %>%
-              dplyr::left_join(tables_data$sub_categories(), join_by(report_sub_category_id == id)) %>%
-              dplyr::left_join(tables_data$populations(), join_by(population_id == id)) %>%
-              dplyr::left_join(tables_data$users() %>% dplyr::rename(production_programmer = username), join_by(production_programmer_id == id)) %>%
-              dplyr::left_join(tables_data$users() %>% dplyr::rename(qc_programmer = username), join_by(qc_programmer_id == id)) %>%
-              dplyr::mutate(
-                titles = purrr::map_chr(id, ~ {
-                  tables_data$report_titles() %>%
-                    dplyr::filter(report_id == .x) %>%
-                    dplyr::inner_join(tables_data$titles(), join_by(title_id == id)) %>%
-                    dplyr::pull(title_text) %>%
-                    paste(collapse = "@#")
-                }),
-                footnotes = purrr::map_chr(id, ~ {
-                  tables_data$report_footnotes() %>%
-                    dplyr::filter(report_id == .x) %>%
-                    dplyr::inner_join(tables_data$footnotes(), join_by(footnote_id == id)) %>%
-                    dplyr::pull(footnote_text) %>%
-                    paste(collapse = "@#")
-                })
-              ) %>%
-              dplyr::filter(report_type %in% c('Table', 'Listing', 'Figure')) %>%
-              dplyr::arrange(desc(priority), desc(assign_date)) %>% 
-              dplyr::select(-dplyr::starts_with("updated_at"))
-
-
-
+        data <- tables_data$report_programming_tracker() %>%
+          dplyr::filter(
+            reporting_effort_id == reporting_effort() & 
+            report_type %in% c('Table', 'Listing', 'Figure')
+          ) %>%
+          dplyr::inner_join(tables_data$reporting_efforts(), join_by(reporting_effort_id == id)) %>%
+          dplyr::inner_join(tables_data$reports(), join_by(report_id == id, report_type == report_type)) %>%
+          dplyr::left_join(tables_data$categories(), join_by(report_category_id == id)) %>%
+          dplyr::left_join(tables_data$sub_categories(), join_by(report_sub_category_id == id)) %>%
+          dplyr::left_join(tables_data$populations(), join_by(population_id == id)) %>%
+          dplyr::left_join(
+            tables_data$users() %>% dplyr::rename(production_programmer = username),
+            join_by(production_programmer_id == id)
+          ) %>%
+          dplyr::left_join(
+            tables_data$users() %>% dplyr::rename(qc_programmer = username),
+            join_by(qc_programmer_id == id)
+          ) %>%
+          dplyr::mutate(
+            titles = purrr::map_chr(id, ~ {
+              tables_data$report_titles() %>%
+                dplyr::filter(report_id == .x) %>%
+                dplyr::inner_join(tables_data$titles(), join_by(title_id == id)) %>%
+                dplyr::pull(title_text) %>%
+                paste(collapse = "<br>")
+            }),
+            footnotes = purrr::map_chr(id, ~ {
+              tables_data$report_footnotes() %>%
+                dplyr::filter(report_id == .x) %>%
+                dplyr::inner_join(tables_data$footnotes(), join_by(footnote_id == id)) %>%
+                dplyr::pull(footnote_text) %>%
+                paste(collapse = "<br>")
+            })
+          ) %>%
+          dplyr::left_join(
+            tables_data$comments() %>%
+              dplyr::group_by(report_programming_tracker_id) %>%
+              dplyr::arrange(desc(updated_at)) %>%
+              dplyr::summarise(
+                comments = paste(comment, collapse = "<br>"),
+                .groups = "drop"
+              ),
+            join_by(id == report_programming_tracker_id)
+          ) %>%
+          dplyr::arrange(desc(priority), assign_date) %>%
+          dplyr::select(
+            report_type,
+            category_name,
+            sub_category_name,
+            report_key,
+            title_key,
+            titles,
+            report_ich_number,
+            population_text,
+            production_programmer,
+            assign_date,
+            qc_programmer,
+            due_date,
+            priority,
+            status,
+            comments,
+            id,
+            reporting_effort_id, 
+            report_id,
+            production_programmer_id,
+            qc_programmer_id,
+            study,
+            database_release,
+            reporting_effort,
+            report_category_id,
+            report_sub_category_id,
+            population_id,
+            category_id,
+            suggested_ich_number,
+            role.x,
+            role.y,
+            footnotes
+          ) %>% 
+          #sort by report_type, priority, report_key, title_key
+          dplyr::arrange(report_type, priority, report_key, title_key)
     })
+
     
     programmingEffortServer("programming_effort", tracker_data, reactive(input$column_selection))
 
@@ -49,7 +103,6 @@ tflTrackerServer <- function(id, pool, reporting_effort,tables_data,reporting_ef
       tables_data$users() %>%
         dplyr::select(id, username)
     })
-    
     
     
     observeEvent(tracker_data(), {
@@ -74,7 +127,8 @@ tflTrackerServer <- function(id, pool, reporting_effort,tables_data,reporting_ef
           "suggested_ich_number",
           "role.x",
           "role.y",
-          "footnotes" 
+          "footnotes"
+
         ) # Default hidden column
       )
     })
@@ -106,42 +160,8 @@ tflTrackerServer <- function(id, pool, reporting_effort,tables_data,reporting_ef
    
     output$tracker_table <- renderDT({
       req(tracker_data())
-      df <- tracker_data() %>% 
-        dplyr::select(
-          report_type,
-          category_name,
-          sub_category_name,
-          report_key,
-          title_key,
-          titles,
-          report_ich_number,
-          population_text,
-          production_programmer,
-          assign_date,
-          qc_programmer,
-          due_date,
-          priority,
-          status,
-          id,
-          reporting_effort_id, 
-          report_id,
-          production_programmer_id,
-          qc_programmer_id,
-          study,
-          database_release,
-          reporting_effort,
-          report_category_id,
-          report_sub_category_id,
-          population_id,
-          category_id,
-          suggested_ich_number,
-          role.x,
-          role.y,
-          footnotes
-        )
-
-
-      
+      df <- tracker_data() 
+  
       # If df is empty, return a notification or a placeholder
       if (is.null(df) || nrow(df) == 0) {
         return(DT::datatable(data.frame(Message = "No data found")))
@@ -154,63 +174,78 @@ tflTrackerServer <- function(id, pool, reporting_effort,tables_data,reporting_ef
              visible = !(colnames(df)[i] %in% hidden_cols))
       })
       
-DT::datatable(
-  df,
-  selection = "single",
-  rownames = FALSE,
-  filter = "top",
-  options = list(
-    pageLength = 10,
-    autoWidth = TRUE,
-    columnDefs = col_defs
-  ),
-  colnames = c(
-    "Report Type" = "report_type",
-    "Category" = "category_name",
-    "Subcategory" = "sub_category_name",
-    "Report Key" = "report_key",
-    "Title Key" = "title_key",
-    "Titles" = "titles",
-    "ICH Number" = "report_ich_number",
-    "Population" = "population_text",
-    "Production Programmer" = "production_programmer",
-    "Assign Date" = "assign_date",
-    "QC Programmer" = "qc_programmer",
-    "Due Date" = "due_date",
-    "Priority" = "priority",
-    "Status" = "status"
-  )) %>%
-        DT::formatDate("Assign Date", method = "toLocaleDateString") %>%
-        DT::formatDate("Due Date", method = "toLocaleDateString") %>%
-        DT::formatStyle("Status",
-                        target = "row",
-                        backgroundColor = DT::styleEqual(
-                          c(
-                            "Not Started",
-                            "Production Started",
-                            "Production Ready",
-                            "Under QC",
-                            "QC Failed",
-                            "QC Pass"
-                          ),
-                          c(
-                            "#E0E0E0",
-                            "#BBE1FA",
-                            "#C8E6C9",
-                            "#FFF9C4",
-                            "#FFCDD2",
-                            "#A5D6A7"
-                          )
-                        ))
-    })
+      # allow html in comments column
+      DT::datatable(
+        df,
+        selection = "single",
+        rownames = FALSE,
+        filter = "top",
+        escape = FALSE,
+        options = list(
+          pageLength = 10,
+          autoWidth = TRUE,
+          columnDefs = col_defs
+        ),
+        colnames = c(
+          "Report Type" = "report_type",
+          "Category" = "category_name",
+          "Subcategory" = "sub_category_name",
+          "Report Key" = "report_key",
+          "Title Key" = "title_key",
+          "Titles" = "titles",
+          "ICH Number" = "report_ich_number",
+          "Population" = "population_text",
+          "Production Programmer" = "production_programmer",
+          "Assign Date" = "assign_date",
+          "QC Programmer" = "qc_programmer",
+          "Due Date" = "due_date",
+          "Priority" = "priority",
+          "Status" = "status",
+          "Comments" = "comments"
+        )) %>%
+              DT::formatDate("Assign Date", method = "toLocaleDateString") %>%
+              DT::formatDate("Due Date", method = "toLocaleDateString") %>%
+              DT::formatStyle("Status",
+                              target = "row",
+                              backgroundColor = DT::styleEqual(
+                                c(
+                                  "Not Started",
+                                  "Production Started",
+                                  "Production Ready",
+                                  "Under QC",
+                                  "QC Failed",
+                                  "QC Pass"
+                                ),
+                                c(
+                                  "#E0E0E0",
+                                  "#BBE1FA",
+                                  "#C8E6C9",
+                                  "#FFF9C4",
+                                  "#FFCDD2",
+                                  "#A5D6A7"
+                                )
+                              ))
+          })
     
     # Storing selected_id for update
     selected_id <- reactiveVal(NULL)
-    
+
+      observe({
+        selected_row <- input$tracker_table_rows_selected
+        if (is.null(selected_row) || length(selected_row) == 0) {
+          selected_id(0)
+        } else {
+          df <- tracker_data()
+          row_data <- df[selected_row, ]
+          selected_id(row_data$id)
+        }
+      })
+    commentsServer("comments", pool,tables_data, selected_id)
+
     observeEvent(input$edit_button, {
       selected_row <- input$tracker_table_rows_selected
-      
-      if (length(selected_row) == 0) {
+
+      if (is.null(selected_row) || length(selected_row) == 0) {
         show_toast(
           title = "Edit Report Programming Details",
           type = "info",
@@ -218,35 +253,11 @@ DT::datatable(
           position = "center"
         )
         return()
-      }
-      
-      # Set `selected_id` to the `id` of the selected row
-      if (length(selected_row) > 0) {
-        df <- tracker_data()
-        row_data <- df[selected_row, ]
-        selected_id(row_data$id)
-      }
-      
-      if (is.null(df) || nrow(df) < selected_row) {
-        showModal(modalDialog(
-          title = "Edit Report Programming Details",
-          "Invalid selection. Please refresh and try again.",
-          easyClose = TRUE,
-          footer = NULL
-        ))
-        return()
-      }
-      
-      if (is.null(selected_id())) {
-        showModal(modalDialog(
-          title = "Edit Report Programming Details",
-          "Could not capture the selected ID. Please refresh and try again.",
-          easyClose = TRUE,
-          footer = NULL
-        ))
-        return()
-      }
-      
+      } 
+     
+      df <- tracker_data()
+      row_data <- df[selected_row, ]
+ 
       # Validate if we have programmers to select from
       prod_prog <- production_programmers()
       qc_prog <- qc_programmers()
@@ -357,17 +368,7 @@ DT::datatable(
       showModal(edit_modal)
     })
     
-    observeEvent(input$save_changes, {
-      if (is.null(selected_id())) {
-        showModal(modalDialog(
-          title = "Error",
-          "No valid ID selected for update. Please try again.",
-          easyClose = TRUE,
-          footer = NULL
-        ))
-        return()
-      }
-      
+    observeEvent(input$save_changes, { 
       prod_id <- input$production_programmer
       qc_id <- input$qc_programmer
       assign_date <- input$assign_date
@@ -375,48 +376,27 @@ DT::datatable(
       priority <- input$priority
       status <- input$status
       
-      # Validation Checks
-      if (!priority %in% 1:5) {
-        showModal(modalDialog(
-          title = "Error",
-          "Priority must be between 1 (Highest) and 5 (Lowest).",
-          easyClose = TRUE,
-          footer = NULL
-        ))
-        return()
-      }
-      
+          
       if (prod_id == qc_id) {
-        showModal(modalDialog(
-          title = "Warning",
-          "Production and QC programmer cannot be the same person.",
-          easyClose = TRUE,
-          footer = NULL
-        ))
+        show_toast(
+          title = "Edit Report Programming Details",
+          type = "error",
+          text = "Production and QC programmer cannot be the same person.",
+          position = "center"
+        )
         return()
       }
       
       if (due_date <= assign_date) {
-        showModal(modalDialog(
-          title = "Warning",
-          "Due date must be after the assign date.",
-          easyClose = TRUE,
-          footer = NULL
-        ))
+        show_toast(
+          title = "Edit Report Programming Details",
+          type = "error",
+          text = "Due date must be after the assign date.",
+          position = "center"
+        )
         return()
       }
-      
-      if (!selected_id() %in% tracker_data()$id) {
-        showModal(modalDialog(
-          title = "Error",
-          "Invalid selection. Please refresh and try again.",
-          easyClose = TRUE,
-          footer = NULL
-        ))
-        return()
-      }
-      
-      cat("Selected ID:", selected_id(), "\n")
+
       tryCatch({
         poolWithTransaction(pool, function(conn) {
           dbExecute(
@@ -427,7 +407,8 @@ DT::datatable(
              qc_programmer_id = ?,
              due_date = ?,
              priority = ?,
-             status = ?
+             status = ?,
+             updated_at = CURRENT_TIMESTAMP
          WHERE id = ? ;",
             params = list(
               prod_id,
@@ -440,22 +421,21 @@ DT::datatable(
             )
           )
         })
-        
-        showModal(modalDialog(
-          title = "Success",
-          "Record updated successfully.",
-          easyClose = TRUE,
-          footer = NULL
-        ))
-        removeModal()
-        
-      }, error = function(e) {
-        showModal(modalDialog(
-          title = "Error",
-          paste("Error updating record:", e$message),
-          easyClose = TRUE,
-          footer = NULL
-        ))
+
+         refresh_trigger(refresh_trigger() + 1)
+        show_toast(
+          title = "Edit Report Programming Details",
+          type = "success",
+          text = "Record updated successfully.",
+          position = "center"
+        )
+        removeModal()}, error = function(e) {
+        show_toast(
+          title = "Edit Report Programming Details",
+          type = "error",
+          text = paste("Error updating record:", e$message),
+          position = "center"
+        )
       })
     })
     

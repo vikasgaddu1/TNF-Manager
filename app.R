@@ -1,4 +1,3 @@
-
 library(shiny)
 library(shinydashboard)
 library(shinydashboardPlus)
@@ -23,7 +22,12 @@ library(gtsummary)
 library(gt)
 library(bslib)
 library(jsonlite)
+library(reactlog)
+library(lubridate)
 
+  # Enable Reactlog
+  options(shiny.reactlog = FALSE)
+  reactlog_enable()
 # Create a pool of connections to the database using RSQLite
 dbPoolCon <- dbPool(RSQLite::SQLite(), dbname = "data/database.sqlite", create = TRUE)
 # Get list of tables in the database
@@ -34,7 +38,22 @@ createTables(dbPoolCon)
 
 
 ui <- dashboardPage(
-  dashboardHeader(title = "Geron App v0.3"),
+  dashboardHeader(title = "Geron App v0.4",  
+
+        tags$li(
+          class = "dropdown",
+          taskSummaryUI("taskSummary")
+        ),
+        tags$li(
+          class = "dropdown margin-top-10",
+          selectizeInput(
+            "user_select",
+            label = NULL,
+            choices = NULL,
+            width = "200px"
+          )
+        )
+      ),
   dashboardSidebar(
     sidebarMenu(
       id = "tabs",
@@ -79,7 +98,7 @@ ui <- dashboardPage(
             tabPanel("Datasets", icon = icon("database"), genericCRUDUI("datasets", "Datasets")),
             tabPanel("Reports", icon = icon("file-lines"), genericCRUDUI("reports", "Reports")),
             tabPanel("Reporting Effort", icon = icon("chart-line"), genericCRUDUI("reporting_effort", "Reporting Effort")),
-            tabPanel("tableSelector", icon = icon("table"), tableSelectorUI("tableSelector"))
+            tabPanel("View DB", icon = icon("table"), tableSelectorUI("tableSelector"))
           )
         )
       ),
@@ -98,13 +117,14 @@ ui <- dashboardPage(
 
 server <- function(input, output, session) {
 
-
+  tracker_data <- reactiveVal()
   tables <- dbListTables(dbPoolCon)
   tables <- tables[tables != "sqlite_sequence"]
   
   # Initialize the reactive tables data
   tables_data <- pollAllTables(dbPoolCon, tables)
   
+ 
   # Use reactive values in modules
   singleColumnCRUDServer("categories", dbPoolCon, "categories", "category_name", tables_data = tables_data)
   subCategoriesCRUDServer("sub_categories", dbPoolCon, tabs_input = reactive(input$crud_tabs), tables_data = tables_data)
@@ -117,8 +137,16 @@ server <- function(input, output, session) {
   usersServer("users", dbPoolCon, tables_data = tables_data)
   associateTask_RE_Server("re_reports", dbPoolCon, tables_data = tables_data)
   programmingTrackerServer("tracker", dbPoolCon, tables_data = tables_data)
-  tableSelectorServer("tableSelector", tables_data = tables_data, table_names = tables)
-  
+  tracker_data <- tableSelectorServer("tableSelector", tables_data = tables_data, table_names = tables)
+  taskSummaryServer("taskSummary", tracker_data, reactive(input$user_select))
+
+  observe({
+    updateSelectizeInput(
+      session,
+      "user_select",
+      choices = unique(tables_data$users()$username)
+    )
+  })
   # Disconnect pool when session ends
   onStop(function() {
     poolClose(dbPoolCon)

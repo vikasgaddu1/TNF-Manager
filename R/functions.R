@@ -12,25 +12,30 @@ load_libraries <- function(libs) {
 pollAllTables <- function(pool, tableNames) {
   rv <- reactiveValues()
   
-  # Create a list of reactive pollers, one for each table
   for (table in tableNames) {
     local({
-      tbl <- table  # Create local copy of table name
-      tableCheckQuery <- sprintf("SELECT MAX(updated_at) as last_update, COUNT(*) as row_count FROM %s", tbl)
+      tbl <- table
+      
+        tableCheckQuery <- sprintf("
+          SELECT COALESCE(MAX(updated_at), 'NULL') || '-' || COUNT(*) AS change_hash
+          FROM %s
+        ", tbl)
+      
       dataQuery <- sprintf("SELECT * FROM %s", tbl)
       
-      # Create reactive polling for this table
       rv[[tbl]] <- reactiveDatabasePolling(
-        pool = pool,
-        checkQuery = tableCheckQuery,
-        dataQuery = dataQuery,
-        poll_interval = 1000  # 1 second interval, adjust as needed
+        pool          = pool,
+        checkQuery    = tableCheckQuery,
+        dataQuery     = dataQuery,
+        poll_interval = 1000
       )
     })
   }
   
   return(rv)
 }
+
+
 
 reactiveDatabasePolling <- function(pool, checkQuery, dataQuery, poll_interval = 1000) {
   reactivePoll(

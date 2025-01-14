@@ -2,6 +2,7 @@ singleColumnCRUDServer <- function(id, pool, table_name, text_column, tables_dat
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
     
+    refresh_trigger <- reactiveVal(0)
     # Prepare display names
     display_name <- text_column %>%
       str_extract("^[^_]+") %>%
@@ -11,6 +12,7 @@ singleColumnCRUDServer <- function(id, pool, table_name, text_column, tables_dat
     
     # Create a reactive to access the table data
     data <- reactive({
+      refresh_trigger()
       tables_data[[table_name]]()
     })
     
@@ -60,14 +62,15 @@ singleColumnCRUDServer <- function(id, pool, table_name, text_column, tables_dat
       
       tryCatch({
         # Use poolWithTransaction to manage transactions
+        # Manually update updated_at column
         poolWithTransaction(pool, function(conn) {
           dbExecute(
             conn,
-            sprintf("INSERT INTO %s (%s) VALUES (?)", table_name, text_column),
+            sprintf("INSERT INTO %s (%s, updated_at) VALUES (?, CURRENT_TIMESTAMP)", table_name, text_column),
             params = list(input$text_input)
           )
         })
-        
+        refresh_trigger(refresh_trigger() + 1)
         # Notify the user of success using shinyWidgets::show_toast
         show_toast(
           title = paste(display_name, "Added"),
@@ -124,7 +127,7 @@ singleColumnCRUDServer <- function(id, pool, table_name, text_column, tables_dat
     observeEvent(input$confirm_edit, {
       # Validate the input field
       if (is.null(input$text_input) || input$text_input == "") {
-        shinyFeedback::showFeedbackDanger(ns("text_input"), "Input cannot be empty.")
+        shinyFeedback::showFeedbackDanger("text_input", "Input cannot be empty.")
         return()
       }
       
@@ -147,11 +150,12 @@ singleColumnCRUDServer <- function(id, pool, table_name, text_column, tables_dat
         poolWithTransaction(pool, function(conn) {
           dbExecute(
             conn,
-            sprintf("UPDATE %s SET %s = ? WHERE id = ?", table_name, text_column),
+            sprintf("UPDATE %s SET %s = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?", table_name, text_column),
             params = list(input$text_input, data()[selected, "id"])
           )
         })
         
+        refresh_trigger(refresh_trigger() + 1)
         # Notify the user of success using shinyWidgets::show_toast
         show_toast(
           title = paste(display_name, "Updated"),
@@ -222,6 +226,7 @@ singleColumnCRUDServer <- function(id, pool, table_name, text_column, tables_dat
           )
         })
         
+        refresh_trigger(refresh_trigger() + 1)
         # Notify the user of success using shinyWidgets::show_toast
         show_toast(
           title = paste(display_name, "Deleted"),

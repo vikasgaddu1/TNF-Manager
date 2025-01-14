@@ -1,15 +1,17 @@
 datasetsCRUDServer <- function(id, pool, tables_data) {
   moduleServer(id, function(input, output, session) {
+    
     ns <- session$ns
     
+    # refresh_trigger <- reactiveVal(0)
     # Create reactive for datasets table
     data <- reactive({
+      # refresh_trigger()
+      req(tables_data$datasets)
       tables_data$datasets()
     })
     
-    # Trigger to refresh data
-    refresh_trigger <- reactiveVal(0)
-    
+
     get_categories <- function(dataset_type) {
       if (dataset_type == "SDTM") {
         return(c("Special Purpose", "Findings", "Event", "Intervention", "Trial Domains", "RELREC"))
@@ -106,8 +108,8 @@ datasetsCRUDServer <- function(id, pool, tables_data) {
         poolWithTransaction(pool, function(conn) {
           dbExecute(
             conn,
-            "INSERT INTO datasets (dataset_type, category_name, dataset_name, dataset_label) 
-             VALUES (?, ?, ?, ?)",
+            "INSERT INTO datasets (dataset_type, category_name, dataset_name, dataset_label, updated_at) 
+             VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)",
             params = list(
               input$dataset_type,
               input$category_name,
@@ -116,7 +118,8 @@ datasetsCRUDServer <- function(id, pool, tables_data) {
             )
           )
         })
-        
+                # track datasets update
+        # refresh_trigger(refresh_trigger() + 1)
         show_toast(
           title = "Add Dataset",
           type = "success",
@@ -236,7 +239,8 @@ datasetsCRUDServer <- function(id, pool, tables_data) {
              SET dataset_type = ?, 
                  category_name = ?, 
                  dataset_name = ?, 
-                 dataset_label = ? 
+                 dataset_label = ?,
+                 updated_at = CURRENT_TIMESTAMP
              WHERE id = ?",
             params = list(
               input$dataset_type,
@@ -247,7 +251,16 @@ datasetsCRUDServer <- function(id, pool, tables_data) {
             )
           )
         })
-        
+
+        # track datasets updates
+        poolWithTransaction(pool, function(conn) {
+          dbExecute(
+            conn,
+            "INSERT INTO datasets_updates (dataset_id) VALUES (?)",
+            params = list(data()[selected, "id"])
+          )
+        })
+        # refresh_trigger(refresh_trigger() + 1)
         show_toast(
           title = "Edit Dataset",
           type = "success",
@@ -326,7 +339,7 @@ datasetsCRUDServer <- function(id, pool, tables_data) {
             params = list(dataset_id)
           )
         })
-        
+        # refresh_trigger(refresh_trigger() + 1)
         show_toast(
           title = "Delete Dataset",
           type = "success",

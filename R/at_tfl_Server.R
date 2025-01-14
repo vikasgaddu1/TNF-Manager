@@ -4,10 +4,70 @@ at_tfl_Server <- function(id, pool,tables_data, reporting_effort, reporting_effo
     function(input, output, session) {
       ns <- session$ns
       
+            refresh_trigger <- reactiveVal(0)
+      # Trigger to refresh data
+      observeEvent(refresh_trigger(), {
+        tryCatch({
+          poolWithTransaction(pool, function(conn) {
+            # Step 1: Insert Missing Records
+            dbExecute(conn, "
+              INSERT INTO report_programming_tracker (
+                  reporting_effort_id, 
+                  report_id, 
+                  report_type,
+                  production_programmer_id, 
+                  qc_programmer_id, 
+                  assign_date, 
+                  due_date, 
+                  priority, 
+                  status
+              )
+              SELECT 
+                  rer.reporting_effort_id,
+                  rer.report_id,
+                  rer.report_type,
+                  NULL,  -- Default value for production_programmer_id
+                  NULL,  -- Default value for qc_programmer_id
+                  NULL,  -- Default assign_date
+                  NULL,  -- Default due_date
+                  1,     -- Default priority (lowest)
+                  'Not Started'  -- Default status
+              FROM 
+                  reporting_effort_reports rer
+              LEFT JOIN 
+                  report_programming_tracker rpt
+              ON 
+                  rer.reporting_effort_id = rpt.reporting_effort_id
+                  AND rer.report_id = rpt.report_id
+                  AND rer.report_type = rpt.report_type
+              WHERE 
+                  rpt.report_id IS NULL AND rer.report_type in ('Table', 'Listing', 'Figure');"
+            )
+
+            # Step 2: Delete Orphaned Records
+            dbExecute(conn, "
+              DELETE FROM report_programming_tracker
+                WHERE report_type in ('Table', 'Listing', 'Figure') AND NOT EXISTS (
+                  SELECT 1
+                  FROM reporting_effort_reports
+                  WHERE reporting_effort_reports.reporting_effort_id = report_programming_tracker.reporting_effort_id
+                        AND reporting_effort_reports.report_id = report_programming_tracker.report_id 
+                        AND reporting_effort_reports.report_type = report_programming_tracker.report_type
+                        AND reporting_effort_reports.report_type in ('Table', 'Listing', 'Figure'));"
+            )
+          })
+          
+          showNotification("Tracker data synced successfully.", type = "message")
+          
+        }, error = function(e) {
+          showNotification(paste("Error ensuring tracker data consistency:", e$message), type = "error")
+        })
+      })
+
       # Reactive to fetch and cache TFL data from the database
       tfl_data <- reactive({
         req(reporting_effort())
-        
+        refresh_trigger()
         # Debugging: Print the reporting effort
         # cat("Reporting Effort ID:", reporting_effort(), "\n")
 
@@ -50,7 +110,7 @@ at_tfl_Server <- function(id, pool,tables_data, reporting_effort, reporting_effo
         titles <- tables_data$report_titles() %>%
           dplyr::left_join(tables_data$titles(), join_by(title_id == id)) %>%
           dplyr::group_by(report_id) %>%
-          dplyr::summarise(Title = paste(title_text, collapse = "@#"))
+          dplyr::summarise(Title = paste(title_text, collapse = "<br>"))
         
         # Debugging: Print the number of titles processed
         # cat("Number of Titles processed:", nrow(titles), "\n")
@@ -59,7 +119,7 @@ at_tfl_Server <- function(id, pool,tables_data, reporting_effort, reporting_effo
         footnotes <- tables_data$report_footnotes() %>%
           dplyr::left_join(tables_data$footnotes(), join_by(footnote_id == id)) %>%
           dplyr::group_by(report_id) %>%
-          dplyr::summarise(Footnotes = paste(footnote_text, collapse = "@#"))
+          dplyr::summarise(Footnotes = paste(footnote_text, collapse = "<br>"))
         
         # Debugging: Print the number of footnotes processed
         # cat("Number of Footnotes processed:", nrow(footnotes), "\n")
@@ -92,7 +152,6 @@ at_tfl_Server <- function(id, pool,tables_data, reporting_effort, reporting_effo
       # Reactive to filter TFL data based on dropdowns and search input
       reports <- reactive({
         req(tfl_data()) # Ensure tfl_data is available
-        
         filtered_data <- tfl_data()
         
         # Apply dropdown filters
@@ -163,7 +222,8 @@ at_tfl_Server <- function(id, pool,tables_data, reporting_effort, reporting_effo
         rhandsontable(
           reports_data,
           useTypes = TRUE, # Enable type detection
-          rowHeaders = FALSE # Disable row headers
+          rowHeaders = FALSE, # Disable row headers
+          allowedTags = "<br>", # Allow HTML tags
         ) %>%
           hot_col("id", readOnly = TRUE, width = 1) %>%
           hot_col("Selected", type = "checkbox", halign = "center") %>% # Make Selected column a checkbox
@@ -174,8 +234,8 @@ at_tfl_Server <- function(id, pool,tables_data, reporting_effort, reporting_effo
           hot_col("sub_category_name", readOnly = TRUE, halign = "left") %>%
           hot_col("report_ich_number", readOnly = TRUE, halign = "center") %>%
           hot_col("population_text", readOnly = TRUE, halign = "left") %>%
-          hot_col("Title", readOnly = TRUE, halign = "left") %>%
-          hot_col("Footnotes", readOnly = TRUE, halign = "left") %>%
+          hot_col("Title", readOnly = TRUE, halign = "left", renderer = htmlwidgets::JS("safeHtmlRenderer")) %>%
+          hot_col("Footnotes", readOnly = TRUE, halign = "left", renderer = htmlwidgets::JS("safeHtmlRenderer")) %>%
           hot_table(contextMenu = FALSE)
       })
       
@@ -226,10 +286,6 @@ at_tfl_Server <- function(id, pool,tables_data, reporting_effort, reporting_effo
             ) %>%
             dplyr::select(-Selected.x, -Selected.y) # Clean up temporary columns
           
-          # Standardize column names (replace space with underscore)
-          edited_data <- edited_data %>%
-            dplyr::rename(report_type = `Report Type`) # Adjust column name here
-          
           # Delete existing associations for the reporting effort
           poolWithTransaction(pool, function(conn) {
             dbExecute(conn, paste(
@@ -245,34 +301,37 @@ at_tfl_Server <- function(id, pool,tables_data, reporting_effort, reporting_effo
           if (nrow(selected_reports) > 0) {
             # Prepare query for reporting_effort_reports
             query_reporting_effort <- paste(
-              "INSERT INTO reporting_effort_reports (reporting_effort_id, report_id, report_type) VALUES ",
+              "INSERT INTO reporting_effort_reports (reporting_effort_id, report_id, report_type, updated_at) VALUES ",
               paste(
-                sprintf("(%s, %s, '%s')", 
+                sprintf("(%s, %s, '%s', CURRENT_TIMESTAMP)", 
                         reporting_effort(), 
                         selected_reports$id, 
                         selected_reports$report_type),
                 collapse = ","
               )
             )
-            poolWithTransaction(pool, function(conn) {
-              dbExecute(conn, query_reporting_effort)
+            tryCatch({
+              poolWithTransaction(pool, function(conn) {
+                dbExecute(conn, query_reporting_effort)
+              })
+            }, error = function(e) {
+              showNotification(paste("Error inserting new associations:", e$message), type = "error")
             })
           }
           
           # Refresh trigger
+          refresh_trigger(refresh_trigger() + 1)  
+
           show_toast(
-            title = "Success",
+            title = "Save",
             type = "success",
             text = "Selection saved successfully!",
-            position = "top-end"
+            position = "center"
           )
         }, error = function(e) {
-          show_toast(
-            title = "Error",
-            type = "error",
-            text = "Error during save operation",
-            position = "top-end"
-          )
+          print(e$message)
+          showNotification(paste("Error during save operation:", e$message), type = "error")
+          print(e)
         })
       })
     }

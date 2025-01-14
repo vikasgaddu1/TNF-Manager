@@ -1,11 +1,12 @@
 subCategoriesCRUDServer <- function(id, pool, tabs_input, tables_data) {
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
-
+    refresh_trigger <- reactiveVal(0)
     categories <- reactive(tables_data$categories())
     subCategories <- reactive(tables_data$sub_categories())
 
     data <- reactive({
+      refresh_trigger()
       req(categories(), subCategories())
       
       data <- subCategories() %>%
@@ -94,7 +95,7 @@ subCategoriesCRUDServer <- function(id, pool, tabs_input, tables_data) {
         poolWithTransaction(pool, function(conn) {
           dbExecute(
             conn,
-            "INSERT INTO sub_categories (category_id, sub_category_name, suggested_ich_number) VALUES (?, ?, ?)",
+            "INSERT INTO sub_categories (category_id, sub_category_name, suggested_ich_number, updated_at) VALUES (?, ?, ?, CURRENT_TIMESTAMP)",
             params = list(
               input$category_id,
               input$sub_category_name,
@@ -102,7 +103,7 @@ subCategoriesCRUDServer <- function(id, pool, tabs_input, tables_data) {
             )
           )
         })
-        
+        refresh_trigger(refresh_trigger() + 1)
         # Notify success and close the modal
         show_toast(
           title = "Add Sub-Category",
@@ -228,7 +229,7 @@ subCategoriesCRUDServer <- function(id, pool, tabs_input, tables_data) {
         poolWithTransaction(pool, function(conn) {
           dbExecute(
             conn,
-            "UPDATE sub_categories SET category_id = ?, sub_category_name = ?, suggested_ich_number = ? WHERE id = ?",
+            "UPDATE sub_categories SET category_id = ?, sub_category_name = ?, suggested_ich_number = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
             params = list(
               updated_sub_category$category_id,
               updated_sub_category$sub_category_name,
@@ -237,7 +238,7 @@ subCategoriesCRUDServer <- function(id, pool, tabs_input, tables_data) {
             )
           )
         })
-        
+        refresh_trigger(refresh_trigger() + 1)
         # Notify success and refresh UI
         show_toast(
           title = "Edit Sub-Category",
@@ -328,7 +329,7 @@ subCategoriesCRUDServer <- function(id, pool, tabs_input, tables_data) {
           text = "Sub-category deleted successfully!",
           position = "top-end"
         )
-        
+        refresh_trigger(refresh_trigger() + 1)
         removeModal()
       }, error = function(e) {
         # Handle errors gracefully

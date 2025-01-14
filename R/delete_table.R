@@ -1,4 +1,8 @@
-# dbPoolCon <- dbPool(RSQLite::SQLite(), dbname = "data/database.sqlite", create = TRUE)
+#dbPoolCon <- dbPool(RSQLite::SQLite(), dbname = "data/database.sqlite", create = TRUE)
+#delete comments table
+#dbExecute(dbPoolCon, "DROP TABLE report_programming_tracker;")
+#dbExecute(dbPoolCon, "DROP TABLE comments;")
+#dbExecute(dbPoolCon, "DROP TABLE reporting_effort_reports;")
 # # Step 1: Create a temporary table with the updated unique constraint
 # dbExecute(
 #   dbPoolCon,

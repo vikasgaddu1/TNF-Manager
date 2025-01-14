@@ -1,9 +1,10 @@
 reportCRUDServer <- function(id, pool, tables_data) {
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
-    
+    refresh_trigger <- reactiveVal(0)
     # Reactive Values and Data ----------------------------------------
     data <- reactive({
+      refresh_trigger()
       # Get data from reactive sources
       reports_data <- tables_data$reports()
       categories_data <- tables_data$categories()
@@ -35,13 +36,13 @@ reportCRUDServer <- function(id, pool, tables_data) {
       titles_processed <- report_titles_data %>%
         inner_join(titles_data, by = c("title_id" = "id")) %>%
         group_by(report_id) %>%
-        summarise(titles = paste(title_text, collapse = "@# "))
+        summarise(titles = paste(title_text, collapse = "<br>"))
       
       # Process footnotes
       footnotes_processed <- report_footnotes_data %>%
         inner_join(footnotes_data, by = c("footnote_id" = "id")) %>%
         group_by(report_id) %>%
-        summarise(footnotes = paste(footnote_text, collapse = "@# "))
+        summarise(footnotes = paste(footnote_text, collapse = "<br>"))
       
       # Combine all data
       main_data %>%
@@ -83,6 +84,7 @@ reportCRUDServer <- function(id, pool, tables_data) {
       DT::datatable(
         data(),
         filter = "top",
+        escape = FALSE,
         colnames = c(
           "ID" = "id",
           "Report Key" = "report_key",
@@ -324,8 +326,9 @@ reportCRUDServer <- function(id, pool, tables_data) {
             conn,
             "INSERT INTO reports (
               report_key, title_key, report_type, report_category_id,
-              report_sub_category_id, report_ich_number, population_id
-            ) VALUES (?, ?, ?, ?, ?, ?, ?)",
+              report_sub_category_id, report_ich_number, population_id,
+              updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)",
             params = list(
               input$report_key,
               input$title_key,
@@ -365,7 +368,7 @@ reportCRUDServer <- function(id, pool, tables_data) {
             }
           }
         })
-        
+        refresh_trigger(refresh_trigger() + 1)
         show_toast(
           title = "Success",
           type = "success",
@@ -433,14 +436,14 @@ reportCRUDServer <- function(id, pool, tables_data) {
             ns("titles"),
             "Select Titles",
             choices = tables_data$titles()$title_text,
-            selected = strsplit(report$titles, "@# ")[[1]],
+            selected = strsplit(report$titles, "<br>")[[1]],
             multiple = TRUE
           ),
           selectizeInput(
             ns("footnotes"),
             "Select Footnotes",
             choices = tables_data$footnotes()$footnote_text,
-            selected = if (!is.na(report$footnotes)) strsplit(report$footnotes, "@# ")[[1]] else NULL,
+            selected = if (!is.na(report$footnotes)) strsplit(report$footnotes, "<br>")[[1]] else NULL,
             multiple = TRUE
           ),
           selectizeInput(
@@ -579,7 +582,8 @@ reportCRUDServer <- function(id, pool, tables_data) {
             "UPDATE reports SET 
               report_key = ?, title_key = ?, report_type = ?,
               report_category_id = ?, report_sub_category_id = ?,
-              report_ich_number = ?, population_id = ?
+              report_ich_number = ?, population_id = ?,
+              updated_at = CURRENT_TIMESTAMP
              WHERE id = ?",
             params = list(
               input$report_key, input$title_key, input$report_type,
@@ -621,7 +625,7 @@ reportCRUDServer <- function(id, pool, tables_data) {
             }
           }
         })
-        
+        refresh_trigger(refresh_trigger() + 1)
         show_toast(
           title = "Success",
           type = "success",
@@ -708,7 +712,7 @@ reportCRUDServer <- function(id, pool, tables_data) {
           text = "Report deleted successfully!",
           position = "top-end"
         )
-        
+        refresh_trigger(refresh_trigger() + 1)
         removeModal()
       }, error = function(e) {
         show_toast(

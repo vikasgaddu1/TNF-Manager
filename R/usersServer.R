@@ -1,9 +1,10 @@
 usersServer <- function(id, pool, tables_data) {
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
-    
+    refresh_trigger <- reactiveVal(0)
     # Use tables_data for automatic updates
     data <- reactive({
+      refresh_trigger()
       tables_data$users()
     })
     
@@ -40,7 +41,7 @@ usersServer <- function(id, pool, tables_data) {
         poolWithTransaction(pool, function(conn) {
           dbExecute(
             conn,
-            "INSERT INTO users (username, role) VALUES (?, ?)",
+            "INSERT INTO users (username, role, updated_at) VALUES (?, ?, CURRENT_TIMESTAMP)",
             params = list(input$username_input, input$role_input)
           )
         })
@@ -51,7 +52,7 @@ usersServer <- function(id, pool, tables_data) {
           text = "User added successfully!",
           position = "top-end"
         )
-        
+        refresh_trigger(refresh_trigger() + 1)
         removeModal()
       }, error = function(e) {
         show_toast(
@@ -121,7 +122,7 @@ usersServer <- function(id, pool, tables_data) {
           text = "User updated successfully!",
           position = "top-end"
         )
-
+        refresh_trigger(refresh_trigger() + 1)
         removeModal()
       }, error = function(e) {
         show_toast(
@@ -181,7 +182,7 @@ usersServer <- function(id, pool, tables_data) {
           text = "User deleted successfully!",
           position = "top-end"
         )
-   
+        refresh_trigger(refresh_trigger() + 1)
         removeModal()
       }, error = function(e) {
         show_toast(

@@ -20,7 +20,8 @@ at_dataset_Server <- function(id, pool,tables_data, reporting_effort, reporting_
                   assign_date, 
                   due_date, 
                   priority, 
-                  status
+                  status,
+                  updated_at
               )
               SELECT 
                   rer.reporting_effort_id,
@@ -30,8 +31,9 @@ at_dataset_Server <- function(id, pool,tables_data, reporting_effort, reporting_
                   NULL,  -- Default value for qc_programmer_id
                   NULL,  -- Default assign_date
                   NULL,  -- Default due_date
-                  1,     -- Default priority (lowest)
-                  'Not Started'  -- Default status
+                  5,     -- Default priority (lowest)
+                  'Not Started',  -- Default status
+                  CURRENT_TIMESTAMP
               FROM 
                   reporting_effort_reports rer
               LEFT JOIN 
@@ -69,7 +71,7 @@ at_dataset_Server <- function(id, pool,tables_data, reporting_effort, reporting_
       # Reactive to fetch and cache dataset data from the database
       dataset_data <- reactive({
         req(reporting_effort())
-        
+        refresh_trigger()
         # Debugging: Print column names of datasets
         # cat("Columns in datasets:", names(tables_data$datasets()), "\n")
         
@@ -208,9 +210,9 @@ at_dataset_Server <- function(id, pool,tables_data, reporting_effort, reporting_
           
           if (nrow(selected_datasets) > 0) {
             query_reporting_effort <- paste(
-              "INSERT INTO reporting_effort_reports (reporting_effort_id, report_id, report_type) VALUES ",
+              "INSERT INTO reporting_effort_reports (reporting_effort_id, report_id, report_type, updated_at) VALUES ",
               paste(
-                sprintf("(%s, %s, '%s')", 
+                sprintf("(%s, %s, '%s', CURRENT_TIMESTAMP)", 
                         reporting_effort(), 
                         selected_datasets$id, 
                         selected_datasets$report_type),
@@ -228,18 +230,13 @@ at_dataset_Server <- function(id, pool,tables_data, reporting_effort, reporting_
           
           refresh_trigger(refresh_trigger() + 1)
           show_toast(
-            title = "Success",
+            title = "Save",
             type = "success",
-            text = "Selection saved successfully.",
-            position = "top-end"
+            text = "Selection saved successfully!",
+            position = "center"
           )
         }, error = function(e) {
-          show_toast(
-            title = "Error",
-            type = "error",
-            text = "Error during save operation",
-            position = "top-end"
-          )
+          showNotification(paste("Error during save operation:", e$message), type = "error")
         })
       })
     }

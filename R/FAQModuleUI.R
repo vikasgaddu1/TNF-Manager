@@ -23,7 +23,10 @@ FAQModuleUI <- function(id) {
     "A: If an error occurs, a notification will appear with details about the error. Ensure all fields are correctly filled and follow the validation rules. If the issue persists, contact support.",
     
     "**Q: How are titles and footnotes managed in reports?**",
-    "A: Titles and footnotes can be selected from predefined lists when adding or editing a report. They are stored separately and linked to reports, allowing for flexible management and reuse across different reports."
+    "A: Titles and footnotes can be selected from predefined lists when adding or editing a report. They are stored separately and linked to reports, allowing for flexible management and reuse across different reports.",
+    
+    "**Q: Markdown cheat sheet**",
+    "A: [Markdown Cheat Sheet](https://www.markdownguide.org/cheat-sheet/)"
   )
   
   # Convert Markdown to HTML for display

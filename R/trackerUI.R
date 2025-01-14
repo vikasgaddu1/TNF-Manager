@@ -1,4 +1,4 @@
-tflTrackerUI <- function(id) {
+trackerUI <- function(id) {
   ns <- NS(id)
   tagList(
     fluidRow(
@@ -17,6 +17,7 @@ tflTrackerUI <- function(id) {
               class = "btn btn-warning btn-sm",
               icon = icon("edit")
             ),
+            commentsUI(ns("comments")),
             downloadButton(
               ns("download_tracker"),
               label = "Download Tracker Data as Excel",

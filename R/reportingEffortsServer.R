@@ -6,6 +6,7 @@ reportingEffortsServer <- function(id, pool, tables_data) {
     refresh_trigger <- reactiveVal(0)
     
     data <- reactive({
+      refresh_trigger()
       tables_data$reporting_efforts()
     })
     
@@ -48,17 +49,20 @@ reportingEffortsServer <- function(id, pool, tables_data) {
       }
 
       tryCatch({
-        new_record <- data.frame(
-          study = input$study_input,
-          database_release = input$db_release_input,
-          reporting_effort = input$effort_input,
-          stringsAsFactors = FALSE
-        )
-        
         poolWithTransaction(pool, function(conn) {
-          dbWriteTable(conn, "reporting_efforts", new_record, append = TRUE, row.names = FALSE)
+          dbExecute(
+            conn,
+            "INSERT INTO reporting_efforts (study, database_release, reporting_effort, updated_at) 
+             VALUES (?, ?, ?, CURRENT_TIMESTAMP)",
+            params = list(
+              input$study_input,
+              input$db_release_input,
+              input$effort_input
+            )
+          )
         })
         
+        refresh_trigger(refresh_trigger() + 1)    
         show_toast(
           title = "Success",
           type = "success",
@@ -126,6 +130,7 @@ reportingEffortsServer <- function(id, pool, tables_data) {
           dbExecute(conn, query, params = list(input$study_input, input$db_release_input, input$effort_input, record_id))
         })
         
+        refresh_trigger(refresh_trigger() + 1)    
         show_toast(
           title = "Success",
           type = "success",
@@ -182,6 +187,7 @@ reportingEffortsServer <- function(id, pool, tables_data) {
           dbExecute(conn, query, params = list(record_id))
         })
         
+        refresh_trigger(refresh_trigger() + 1)    
         show_toast(
           title = "Success",
           type = "success",

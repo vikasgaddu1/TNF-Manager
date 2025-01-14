@@ -8,21 +8,23 @@ createTables <- function(pool) {
       category_name TEXT NOT NULL,
       dataset_name TEXT NOT NULL,
       dataset_label TEXT NOT NULL,
-      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      updated_at DATETIME    ,
+      UNIQUE (dataset_type, dataset_name)
     );"
   )
   
-  
+ 
   # Categories table
   dbExecute(
     pool,
     "CREATE TABLE IF NOT EXISTS categories (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       category_name TEXT UNIQUE NOT NULL,
-      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      updated_at DATETIME    
     );"
   )
   
+
   # Sub_Categories table
   dbExecute(
     pool,
@@ -31,7 +33,7 @@ createTables <- function(pool) {
       category_id INTEGER NOT NULL,
       sub_category_name TEXT UNIQUE NOT NULL,
       suggested_ich_number TEXT NOT NULL,
-      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME   ,
       FOREIGN KEY (category_id) REFERENCES categories (id) ON DELETE CASCADE,
       UNIQUE (category_id, sub_category_name)
     );"
@@ -43,7 +45,7 @@ createTables <- function(pool) {
     "CREATE TABLE IF NOT EXISTS titles (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       title_text TEXT UNIQUE NOT NULL,
-      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      updated_at DATETIME    
     );"
   )
   
@@ -53,7 +55,7 @@ createTables <- function(pool) {
     "CREATE TABLE IF NOT EXISTS footnotes (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       footnote_text TEXT UNIQUE NOT NULL,
-      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      updated_at DATETIME    
     );"
   )
   
@@ -63,7 +65,7 @@ createTables <- function(pool) {
     "CREATE TABLE IF NOT EXISTS populations (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       population_text TEXT UNIQUE NOT NULL,
-      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      updated_at DATETIME    
     );"
   )
   
@@ -79,14 +81,14 @@ createTables <- function(pool) {
       report_sub_category_id INTEGER ,
       report_ich_number TEXT ,
       population_id INTEGER ,
-      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME    ,
       FOREIGN KEY (population_id) REFERENCES populations (id) ON DELETE CASCADE,
       FOREIGN KEY (report_category_id) REFERENCES categories (id) ON DELETE CASCADE,
       FOREIGN KEY (report_sub_category_id) REFERENCES sub_categories (id) ON DELETE CASCADE,
       UNIQUE (report_key, report_type)
     );"
-  )
-  
+    )
+
   # Report_Titles association table
   dbExecute(
     pool,
@@ -95,7 +97,7 @@ createTables <- function(pool) {
       report_id INTEGER NOT NULL,
       title_id INTEGER NOT NULL,
       sequence INTEGER NOT NULL,
-      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME    ,
       FOREIGN KEY (report_id) REFERENCES reports (id) ON DELETE CASCADE,
       FOREIGN KEY (title_id) REFERENCES titles (id) ON DELETE CASCADE,
       UNIQUE (report_id, title_id)
@@ -110,7 +112,7 @@ createTables <- function(pool) {
       report_id INTEGER NOT NULL,
       footnote_id INTEGER NOT NULL,
       sequence INTEGER NOT NULL,
-      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME    ,
       FOREIGN KEY (report_id) REFERENCES reports (id) ON DELETE CASCADE,
       FOREIGN KEY (footnote_id) REFERENCES footnotes (id) ON DELETE CASCADE,
       UNIQUE (report_id, footnote_id)
@@ -125,10 +127,10 @@ createTables <- function(pool) {
       study TEXT NOT NULL,
       database_release TEXT NOT NULL,
       reporting_effort TEXT NOT NULL,
-      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      updated_at DATETIME    
     );"
   )
-  
+
   dbExecute(
     pool,
     "CREATE TABLE IF NOT EXISTS reporting_effort_reports (
@@ -136,13 +138,12 @@ createTables <- function(pool) {
       reporting_effort_id INTEGER NOT NULL,
       report_id INTEGER NOT NULL,
       report_type TEXT NOT NULL,
-      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME    ,
       FOREIGN KEY (reporting_effort_id) REFERENCES reporting_efforts (id) ON DELETE CASCADE,
       FOREIGN KEY (report_id) REFERENCES reports (id) ON DELETE CASCADE,
       UNIQUE (reporting_effort_id, report_id,report_type)
   );"
   )
-  
 
   # Users table
   dbExecute(
@@ -151,7 +152,7 @@ createTables <- function(pool) {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       username TEXT NOT NULL UNIQUE,
       role TEXT CHECK (role IN ('admin', 'user', 'production_programmer', 'qc_programmer')),
-      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      updated_at DATETIME    
     );"
   )
   
@@ -159,7 +160,7 @@ createTables <- function(pool) {
   dbExecute(
     pool,
     "CREATE TABLE IF NOT EXISTS report_programming_tracker (
-      id INTEGER PRIMARY KEY,
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
       reporting_effort_id INTEGER NOT NULL,
       report_type TEXT NOT NULL,
       report_id INTEGER NOT NULL,
@@ -169,40 +170,51 @@ createTables <- function(pool) {
       qc_programmer_id INTEGER,
       due_date DATE,
       status TEXT,
-      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME    ,
       FOREIGN KEY (reporting_effort_id) REFERENCES reporting_efforts (id) ON DELETE CASCADE,
       FOREIGN KEY (production_programmer_id) REFERENCES users (id),
       FOREIGN KEY (qc_programmer_id) REFERENCES users (id),
       UNIQUE (reporting_effort_id, report_id, report_type)
-    );
-"
+    );"
   )
-  
+
+  # create table comments
+  dbExecute(
+    pool,
+    "CREATE TABLE IF NOT EXISTS comments (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      report_programming_tracker_id INTEGER NOT NULL,
+      comment_user_id INTEGER NOT NULL,
+      comment TEXT NOT NULL,
+      updated_at DATETIME    ,
+      FOREIGN KEY (report_programming_tracker_id) REFERENCES report_programming_tracker (id) ON DELETE CASCADE,
+      FOREIGN KEY (comment_user_id) REFERENCES users (id) ON DELETE CASCADE
+    );"
+  )
   # Create indexes
   dbExecute(pool, "CREATE INDEX IF NOT EXISTS idx_report_category_id ON reports (report_category_id);")
   dbExecute(pool, "CREATE INDEX IF NOT EXISTS idx_report_sub_category_id ON reports (report_sub_category_id);")
   dbExecute(pool, "CREATE INDEX IF NOT EXISTS idx_reports_population_id ON reports (population_id);")
   dbExecute(pool, "CREATE INDEX IF NOT EXISTS idx_report_programming_tracker_report_id ON report_programming_tracker (report_id);")
   
-  # Create triggers for updated_at
-  tables <- dbListTables(pool)
-  #drop sqlite_sequence from tables
-  tables <- tables[tables != "sqlite_sequence"]
+#   # Create triggers for updated_at
+#   tables <- dbListTables(pool)
+#   #drop sqlite_sequence from tables
+#   tables <- tables[tables != "sqlite_sequence"]
   
-  for (table in tables) {
-    dbExecute(
-      pool,
-      sprintf(
-        "CREATE TRIGGER IF NOT EXISTS update_%s_updated_at 
-         AFTER UPDATE ON %s
-         FOR EACH ROW
-         BEGIN
-           UPDATE %s 
-           SET updated_at = DATETIME('now', 'localtime')
-           WHERE id = NEW.id;
-         END;",
-        table, table, table
-      )
-    )
-  }
+#   for (table in tables) {
+#     dbExecute(
+#       pool,
+#       sprintf(
+#         "CREATE TRIGGER IF NOT EXISTS update_%s_updated_at 
+#          AFTER UPDATE ON %s
+#          FOR EACH ROW
+#          BEGIN
+#            UPDATE %s 
+#            SET updated_at = DATETIME('now', 'localtime')
+#            WHERE id = NEW.id;
+#          END;",
+#         table, table, table
+#       )
+#}
 }
