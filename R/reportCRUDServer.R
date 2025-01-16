@@ -524,15 +524,15 @@ reportCRUDServer <- function(id, pool, tables_data) {
       }
       
       # Validate ICH number format
-      if (!validate_ich_number(input$report_ich_number)) {
-        prefix <- switch(input$report_type, "Table" = "14", "Listing" = "15", "Figure" = "16")
-        shinyFeedback::feedbackDanger(
-          "report_ich_number", 
-          TRUE, 
-          sprintf("Must start with %s for %s", prefix, tolower(input$report_type))
-        )
-        has_error <- TRUE
-      }
+      # if (!validate_ich_number(input$report_ich_number)) {
+      #   prefix <- switch(input$report_type, "Table" = "14", "Listing" = "15", "Figure" = "16")
+      #   shinyFeedback::feedbackDanger(
+      #     "report_ich_number", 
+      #     TRUE, 
+      #     sprintf("Must start with %s for %s", prefix, tolower(input$report_type))
+      #   )
+      #   has_error <- TRUE
+      # }
       
       if (has_error) {
         show_toast(

@@ -21,6 +21,7 @@ at_dataset_Server <- function(id, pool,tables_data, reporting_effort, reporting_
                   due_date, 
                   priority, 
                   status,
+                  qc_level,
                   updated_at
               )
               SELECT 
@@ -33,6 +34,7 @@ at_dataset_Server <- function(id, pool,tables_data, reporting_effort, reporting_
                   NULL,  -- Default due_date
                   5,     -- Default priority (lowest)
                   'Not Started',  -- Default status
+                  3,     -- Default qc_level
                   CURRENT_TIMESTAMP
               FROM 
                   reporting_effort_reports rer

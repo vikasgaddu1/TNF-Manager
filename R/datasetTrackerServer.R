@@ -44,6 +44,7 @@ datasetTrackerServer <- function(id, pool, reporting_effort, ds_type, tables_dat
           due_date,
           priority,
           status,
+          qc_level,
           comments
         ) %>%
         dplyr::arrange(report_type, priority, dataset_name)
@@ -133,7 +134,8 @@ datasetTrackerServer <- function(id, pool, reporting_effort, ds_type, tables_dat
           "Assign Date" = "assign_date",
           "Due Date" = "due_date",
           "Priority" = "priority",
-          "Status" = "status"
+          "Status" = "status",
+          "Assigned Validation Level" = "qc_level"
         )
       ) %>%
         DT::formatDate("Assign Date", method = "toLocaleDateString") %>%
@@ -292,12 +294,18 @@ datasetTrackerServer <- function(id, pool, reporting_effort, ds_type, tables_dat
               } else {
                 as.Date(row_data$due_date, format = "%Y-%m-%d")
               }
-            ),
+            ),  
             selectInput(
               ns("priority"),
               "Priority (1 <- Highest 5 <- Lowest):",
               choices = 1:5,
               selected = row_data$priority
+            ),
+            selectInput(
+              ns("qc_level"),
+              "Assigned Validation Level:",
+              choices = 1:3,
+              selected = row_data$qc_level
             )
           )
         )
@@ -318,7 +326,7 @@ datasetTrackerServer <- function(id, pool, reporting_effort, ds_type, tables_dat
       due_date <- input$due_date
       priority <- input$priority
       status <- input$status
-
+      qc_level <- input$qc_level
       if (prod_id == qc_id) {
         show_toast(
           title = "Edit",
@@ -350,9 +358,10 @@ datasetTrackerServer <- function(id, pool, reporting_effort, ds_type, tables_dat
                due_date = ?,
                priority = ?,
                status = ?,
+               qc_level = ?,
                updated_at = CURRENT_TIMESTAMP
            WHERE id = ?;",
-            params = list(prod_id, qc_id, as.character(assign_date), as.character(due_date), as.integer(priority), status, row_data$id)
+            params = list(prod_id, qc_id, as.character(assign_date), as.character(due_date), as.integer(priority), status, as.integer(qc_level), row_data$id)
           )
 
           refresh_trigger(refresh_trigger() + 1)

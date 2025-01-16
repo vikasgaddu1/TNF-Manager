@@ -2,3 +2,9 @@
 .Rhistory
 .RData
 .Ruserdata
+.xlsx
+.xls
+
+# Ignore excel_export folder in data
+data/excel_export/
+R/archive/

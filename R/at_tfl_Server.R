@@ -17,6 +17,7 @@ at_tfl_Server <- function(id, pool,tables_data, reporting_effort, reporting_effo
                   report_type,
                   production_programmer_id, 
                   qc_programmer_id, 
+                  qc_level,
                   assign_date, 
                   due_date, 
                   priority, 
@@ -28,9 +29,10 @@ at_tfl_Server <- function(id, pool,tables_data, reporting_effort, reporting_effo
                   rer.report_type,
                   NULL,  -- Default value for production_programmer_id
                   NULL,  -- Default value for qc_programmer_id
+                  3,     -- Default qc_level
                   NULL,  -- Default assign_date
                   NULL,  -- Default due_date
-                  1,     -- Default priority (lowest)
+                  5,     -- Default priority (lowest)
                   'Not Started'  -- Default status
               FROM 
                   reporting_effort_reports rer

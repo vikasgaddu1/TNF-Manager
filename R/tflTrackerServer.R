@@ -69,6 +69,7 @@ tflTrackerServer <- function(id, pool, reporting_effort,tables_data,reporting_ef
             due_date,
             priority,
             status,
+            qc_level,
             comments,
             id,
             reporting_effort_id, 
@@ -197,6 +198,7 @@ tflTrackerServer <- function(id, pool, reporting_effort,tables_data,reporting_ef
           "Population" = "population_text",
           "Production Programmer" = "production_programmer",
           "Assign Date" = "assign_date",
+          "Assigned Validation Level" = "qc_level",
           "QC Programmer" = "qc_programmer",
           "Due Date" = "due_date",
           "Priority" = "priority",
@@ -351,6 +353,16 @@ tflTrackerServer <- function(id, pool, reporting_effort,tables_data,reporting_ef
               }
             ),  
             selectInput(
+              ns("qc_level"),
+              "Assigned Validation Level:",
+              choices = 1:3,
+              selected = ifelse(
+                is.na(row_data$qc_level),
+                3,
+                as.integer(row_data$qc_level)
+              )
+            ),
+            selectInput(
               ns("priority"),
               "Priority (1 <- Highest 5 <- Lowest):",
               choices = 1:5,
@@ -375,6 +387,7 @@ tflTrackerServer <- function(id, pool, reporting_effort,tables_data,reporting_ef
       due_date <- input$due_date
       priority <- input$priority
       status <- input$status
+      qc_level <- input$qc_level
       
           
       if (prod_id == qc_id) {
@@ -408,6 +421,7 @@ tflTrackerServer <- function(id, pool, reporting_effort,tables_data,reporting_ef
              due_date = ?,
              priority = ?,
              status = ?,
+             qc_level = ?,
              updated_at = CURRENT_TIMESTAMP
          WHERE id = ? ;",
             params = list(
@@ -417,6 +431,7 @@ tflTrackerServer <- function(id, pool, reporting_effort,tables_data,reporting_ef
               as.character(due_date),
               as.integer(priority),
               status,
+              as.integer(qc_level),
               selected_id()
             )
           )

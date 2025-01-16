@@ -8,7 +8,7 @@ createTables <- function(pool) {
       category_name TEXT NOT NULL,
       dataset_name TEXT NOT NULL,
       dataset_label TEXT NOT NULL,
-      updated_at DATETIME    ,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       UNIQUE (dataset_type, dataset_name)
     );"
   )
@@ -20,7 +20,7 @@ createTables <- function(pool) {
     "CREATE TABLE IF NOT EXISTS categories (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       category_name TEXT UNIQUE NOT NULL,
-      updated_at DATETIME    
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP    
     );"
   )
   
@@ -31,9 +31,9 @@ createTables <- function(pool) {
     "CREATE TABLE IF NOT EXISTS sub_categories (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       category_id INTEGER NOT NULL,
-      sub_category_name TEXT UNIQUE NOT NULL,
+      sub_category_name TEXT NOT NULL,
       suggested_ich_number TEXT NOT NULL,
-      updated_at DATETIME   ,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (category_id) REFERENCES categories (id) ON DELETE CASCADE,
       UNIQUE (category_id, sub_category_name)
     );"
@@ -45,7 +45,7 @@ createTables <- function(pool) {
     "CREATE TABLE IF NOT EXISTS titles (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       title_text TEXT UNIQUE NOT NULL,
-      updated_at DATETIME    
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP    
     );"
   )
   
@@ -55,7 +55,7 @@ createTables <- function(pool) {
     "CREATE TABLE IF NOT EXISTS footnotes (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       footnote_text TEXT UNIQUE NOT NULL,
-      updated_at DATETIME    
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP    
     );"
   )
   
@@ -65,7 +65,7 @@ createTables <- function(pool) {
     "CREATE TABLE IF NOT EXISTS populations (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       population_text TEXT UNIQUE NOT NULL,
-      updated_at DATETIME    
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP    
     );"
   )
   
@@ -81,7 +81,7 @@ createTables <- function(pool) {
       report_sub_category_id INTEGER ,
       report_ich_number TEXT ,
       population_id INTEGER ,
-      updated_at DATETIME    ,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,  
       FOREIGN KEY (population_id) REFERENCES populations (id) ON DELETE CASCADE,
       FOREIGN KEY (report_category_id) REFERENCES categories (id) ON DELETE CASCADE,
       FOREIGN KEY (report_sub_category_id) REFERENCES sub_categories (id) ON DELETE CASCADE,
@@ -97,7 +97,7 @@ createTables <- function(pool) {
       report_id INTEGER NOT NULL,
       title_id INTEGER NOT NULL,
       sequence INTEGER NOT NULL,
-      updated_at DATETIME    ,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,  
       FOREIGN KEY (report_id) REFERENCES reports (id) ON DELETE CASCADE,
       FOREIGN KEY (title_id) REFERENCES titles (id) ON DELETE CASCADE,
       UNIQUE (report_id, title_id)
@@ -112,7 +112,7 @@ createTables <- function(pool) {
       report_id INTEGER NOT NULL,
       footnote_id INTEGER NOT NULL,
       sequence INTEGER NOT NULL,
-      updated_at DATETIME    ,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,  
       FOREIGN KEY (report_id) REFERENCES reports (id) ON DELETE CASCADE,
       FOREIGN KEY (footnote_id) REFERENCES footnotes (id) ON DELETE CASCADE,
       UNIQUE (report_id, footnote_id)
@@ -127,7 +127,7 @@ createTables <- function(pool) {
       study TEXT NOT NULL,
       database_release TEXT NOT NULL,
       reporting_effort TEXT NOT NULL,
-      updated_at DATETIME    
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP   
     );"
   )
 
@@ -138,7 +138,7 @@ createTables <- function(pool) {
       reporting_effort_id INTEGER NOT NULL,
       report_id INTEGER NOT NULL,
       report_type TEXT NOT NULL,
-      updated_at DATETIME    ,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,  
       FOREIGN KEY (reporting_effort_id) REFERENCES reporting_efforts (id) ON DELETE CASCADE,
       FOREIGN KEY (report_id) REFERENCES reports (id) ON DELETE CASCADE,
       UNIQUE (reporting_effort_id, report_id,report_type)
@@ -151,8 +151,8 @@ createTables <- function(pool) {
     "CREATE TABLE IF NOT EXISTS users (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       username TEXT NOT NULL UNIQUE,
-      role TEXT CHECK (role IN ('admin', 'user', 'production_programmer', 'qc_programmer')),
-      updated_at DATETIME    
+      role TEXT CHECK (role IN ('admin', 'user')),
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP   
     );"
   )
   
@@ -167,10 +167,11 @@ createTables <- function(pool) {
       priority INTEGER,
       production_programmer_id INTEGER,
       assign_date DATE,
+      qc_level INTEGER,
       qc_programmer_id INTEGER,
       due_date DATE,
       status TEXT,
-      updated_at DATETIME    ,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (reporting_effort_id) REFERENCES reporting_efforts (id) ON DELETE CASCADE,
       FOREIGN KEY (production_programmer_id) REFERENCES users (id),
       FOREIGN KEY (qc_programmer_id) REFERENCES users (id),
@@ -186,7 +187,7 @@ createTables <- function(pool) {
       report_programming_tracker_id INTEGER NOT NULL,
       comment_user_id INTEGER NOT NULL,
       comment TEXT NOT NULL,
-      updated_at DATETIME    ,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (report_programming_tracker_id) REFERENCES report_programming_tracker (id) ON DELETE CASCADE,
       FOREIGN KEY (comment_user_id) REFERENCES users (id) ON DELETE CASCADE
     );"

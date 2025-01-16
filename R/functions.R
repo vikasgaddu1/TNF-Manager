@@ -1,4 +1,4 @@
-# This function will take a vector with names of libraries and check if 
+# This function will take a vector with names of libraries and check if
 # they are installed. If not, it will install them and load them
 load_libraries <- function(libs) {
   for (lib in libs) {
@@ -11,15 +11,35 @@ load_libraries <- function(libs) {
 
 pollAllTables <- function(pool, tableNames) {
   rv <- reactiveValues()
+  req(tableNames)
+  
   
   for (table in tableNames) {
     local({
       tbl <- table
       
-        tableCheckQuery <- sprintf("
-          SELECT COALESCE(MAX(updated_at), 'NULL') || '-' || COUNT(*) AS change_hash
-          FROM %s
-        ", tbl)
+      # # Check if 'updated_at' exists in the table
+      # checkColumnQuery <- sprintf("
+      #   SELECT name
+      #   FROM pragma_table_info('%s')
+      #   WHERE name = 'updated_at'
+      # ", tbl)
+      #
+      # columnExists <- dbGetQuery(pool, checkColumnQuery)
+      #
+      # if (nrow(columnExists) == 0) {
+      #   warning(paste0("Table", tbl, "does not have the 'updated_at' column."))
+      #   return(NULL)
+      # }
+      
+      # If the column exists, proceed with the queries
+      tableCheckQuery <- sprintf(
+        "
+        SELECT COALESCE(MAX(updated_at), 'NULL') || '-' || COUNT(*) AS change_hash
+        FROM %s
+      ",
+        tbl
+      )
       
       dataQuery <- sprintf("SELECT * FROM %s", tbl)
       
@@ -37,7 +57,11 @@ pollAllTables <- function(pool, tableNames) {
 
 
 
-reactiveDatabasePolling <- function(pool, checkQuery, dataQuery, poll_interval = 1000) {
+
+reactiveDatabasePolling <- function(pool,
+                                    checkQuery,
+                                    dataQuery,
+                                    poll_interval = 1000) {
   reactivePoll(
     intervalMillis = poll_interval,
     session = NULL,
@@ -72,12 +96,27 @@ combine_data <- function(main_data, titles_data, footnotes_data) {
 }
 
 # Helper function for validation
-validate_report_inputs <- function(report_type, report_key, title_key, ich_number) {
-  expected_prefix <- switch(report_type, "Table" = "t", "Listing" = "l", "Figure" = "f", NULL)
+validate_report_inputs <- function(report_type,
+                                   report_key,
+                                   title_key,
+                                   ich_number) {
+  expected_prefix <- switch(
+    report_type,
+    "Table" = "t",
+    "Listing" = "l",
+    "Figure" = "f",
+    NULL
+  )
   validate(
     need(!is.null(expected_prefix), "Invalid report type"),
-    need(startsWith(tolower(report_key), expected_prefix), paste("Report key must start with", expected_prefix)),
-    need(startsWith(tolower(title_key), expected_prefix), paste("Title key must start with", expected_prefix))
+    need(
+      startsWith(tolower(report_key), expected_prefix),
+      paste("Report key must start with", expected_prefix)
+    ),
+    need(
+      startsWith(tolower(title_key), expected_prefix),
+      paste("Title key must start with", expected_prefix)
+    )
   )
   
   pattern <- switch(
@@ -89,20 +128,24 @@ validate_report_inputs <- function(report_type, report_key, title_key, ich_numbe
   validate(need(grepl(pattern, ich_number), "Invalid ICH number format"))
 }
 
-  # Helper Functions -----------------------------------------------
-  validate_keys <- function(report_type, report_key, title_key) {
-    prefix <- switch(report_type,
-                    "Table" = "t",
-                    "Listing" = "l",
-                    "Figure" = "f")
-    
-    startsWith(report_key, prefix) && startsWith(title_key, prefix)
-  }
+# Helper Functions -----------------------------------------------
+validate_keys <- function(report_type, report_key, title_key) {
+  prefix <- switch(
+    report_type,
+    "Table" = "t",
+    "Listing" = "l",
+    "Figure" = "f"
+  )
   
-  validate_ich_number <- function(ich_number) {
-    if (is.null(ich_number) || ich_number == "") return(FALSE)
-    
-    # Check if it starts with valid prefix
-    valid_prefixes <- c("14", "15", "16")
-    any(sapply(valid_prefixes, function(prefix) startsWith(ich_number, prefix)))
-  }
+  startsWith(report_key, prefix) && startsWith(title_key, prefix)
+}
+
+validate_ich_number <- function(ich_number) {
+  if (is.null(ich_number) || ich_number == "")
+    return(FALSE)
+  
+  # Check if it starts with valid prefix
+  valid_prefixes <- c("14", "15", "16")
+  any(sapply(valid_prefixes, function(prefix)
+    startsWith(ich_number, prefix)))
+}
