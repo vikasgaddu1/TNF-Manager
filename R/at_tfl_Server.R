@@ -219,7 +219,19 @@ at_tfl_Server <- function(id, pool,tables_data, reporting_effort, reporting_effo
         # Remove id from display but keep it for backend operations
         reports_data <- reports() %>%
           select(id, Selected, report_type, report_key, title_key, category_name, sub_category_name, report_ich_number, population_text, Title, Footnotes) %>%
-          arrange(report_type, report_key, title_key, category_name, sub_category_name, population_text, report_ich_number)
+          arrange(report_type, report_key, title_key, category_name, sub_category_name, population_text, report_ich_number)%>%
+          rename(
+            "Selection" = Selected,
+            "Report Type" = report_type,
+            "Report Key" = report_key,
+            "Title Key" = title_key,
+            "Category" = category_name,
+            "Subcategory" = sub_category_name,
+            "ICH Number" = report_ich_number,
+            "Population" = population_text,
+            "Title" = Title,
+            "Footnotes" = Footnotes
+          )
         
         rhandsontable(
           reports_data,
@@ -228,14 +240,14 @@ at_tfl_Server <- function(id, pool,tables_data, reporting_effort, reporting_effo
           allowedTags = "<br>", # Allow HTML tags
         ) %>%
           hot_col("id", readOnly = TRUE, width = 1) %>%
-          hot_col("Selected", type = "checkbox", halign = "center") %>% # Make Selected column a checkbox
-          hot_col("report_type", readOnly = TRUE, halign = "left") %>%
-          hot_col("report_key", readOnly = TRUE, halign = "left") %>%
-          hot_col("title_key", readOnly = TRUE, halign = "left") %>%
-          hot_col("category_name", readOnly = TRUE, halign = "left") %>%
-          hot_col("sub_category_name", readOnly = TRUE, halign = "left") %>%
-          hot_col("report_ich_number", readOnly = TRUE, halign = "center") %>%
-          hot_col("population_text", readOnly = TRUE, halign = "left") %>%
+          hot_col("Selection", type = "checkbox", halign = "center") %>% # Make Selected column a checkbox
+          hot_col("Report Type", readOnly = TRUE, halign = "left") %>%
+          hot_col("Report Key", readOnly = TRUE, halign = "left") %>%
+          hot_col("Title Key", readOnly = TRUE, halign = "left") %>%
+          hot_col("Category", readOnly = TRUE, halign = "left") %>%
+          hot_col("Subcategory", readOnly = TRUE, halign = "left") %>%
+          hot_col("ICH Number", readOnly = TRUE, halign = "center") %>%
+          hot_col("Population", readOnly = TRUE, halign = "left") %>%
           hot_col("Title", readOnly = TRUE, halign = "left", renderer = htmlwidgets::JS("safeHtmlRenderer")) %>%
           hot_col("Footnotes", readOnly = TRUE, halign = "left", renderer = htmlwidgets::JS("safeHtmlRenderer")) %>%
           hot_table(contextMenu = FALSE)
@@ -275,7 +287,19 @@ at_tfl_Server <- function(id, pool,tables_data, reporting_effort, reporting_effo
         
         tryCatch({
           # Retrieve edited data
-          edited_data <- hot_to_r(input$reports_table)
+          edited_data <- hot_to_r(input$reports_table) %>%
+            rename(
+              Selected = "Selection",
+              report_type = "Report Type",
+              report_key = "Report Key",
+              title_key = "Title Key",
+              category_name = "Category",
+              sub_category_name = "Subcategory",
+              report_ich_number = "ICH Number",
+              population_text = "Population",
+              Title = "Title",
+              Footnotes = "Footnotes"
+            )
           
           # Merge with tfl_data and get previously selected values using dplyr join_by
           edited_data <- dplyr::left_join(

@@ -1,4 +1,4 @@
-source("R/createTables.r")
+source("R/createTables.R")
 # export database to xlsx
 export_database <- function(pool) {
   library(openxlsx)
@@ -111,6 +111,6 @@ library(DBI)
 library(RSQLite)
 library(pool)
 pool <- dbPool(RSQLite::SQLite(), dbname = "data/database.sqlite", create = TRUE)
-check_tables(pool)
-import_database(pool)
+#check_tables(pool)
+#import_database(pool)
 #export_database(pool)
