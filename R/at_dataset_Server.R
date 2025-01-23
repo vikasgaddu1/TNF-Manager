@@ -28,8 +28,8 @@ at_dataset_Server <- function(id, pool,tables_data, reporting_effort, reporting_
                   rer.reporting_effort_id,
                   rer.report_id,
                   rer.report_type,
-                  NULL,  -- Default value for production_programmer_id
-                  NULL,  -- Default value for qc_programmer_id
+                  1,  -- Default value for production_programmer_id
+                  1,  -- Default value for qc_programmer_id
                   NULL,  -- Default assign_date
                   NULL,  -- Default due_date
                   5,     -- Default priority (lowest)
