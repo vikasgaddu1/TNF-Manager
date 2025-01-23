@@ -27,8 +27,8 @@ at_tfl_Server <- function(id, pool,tables_data, reporting_effort, reporting_effo
                   rer.reporting_effort_id,
                   rer.report_id,
                   rer.report_type,
-                  NULL,  -- Default value for production_programmer_id
-                  NULL,  -- Default value for qc_programmer_id
+                  1,     -- Default value for production_programmer_id (assuming 1 for 'Not Assigned')
+                  1,     -- Default value for qc_programmer_id (assuming 1 for 'Not Assigned')
                   3,     -- Default qc_level
                   NULL,  -- Default assign_date
                   NULL,  -- Default due_date
@@ -93,13 +93,13 @@ at_tfl_Server <- function(id, pool,tables_data, reporting_effort, reporting_effo
         # cat("Number of reports after joining populations:", nrow(reports), "\n")
         
         # Filter and join with reporting_effort_reports
-        reports <- reports %>%
+         reports <- reports %>%
           dplyr::left_join(
             tables_data$reporting_effort_reports() %>%
               dplyr::filter(reporting_effort_id == reporting_effort()), 
             join_by(id == report_id, report_type == report_type)
-          )
-        # cat("Number of reports after joining reporting_effort_reports:", nrow(reports), "\n")
+          )       
+           # cat("Number of reports after joining reporting_effort_reports:", nrow(reports), "\n")
         
         # Filter and mutate
         reports <- reports %>%
@@ -129,7 +129,7 @@ at_tfl_Server <- function(id, pool,tables_data, reporting_effort, reporting_effo
         # Combine all data
         reports <- reports %>%
           dplyr::left_join(titles, join_by(id == report_id)) %>%
-          dplyr::left_join(footnotes, join_by(id == report_id)) %>%
+          dplyr::left_join(footnotes, join_by(id == report_id))  %>% 
           dplyr::select(
             Selected,
             id,
@@ -143,7 +143,7 @@ at_tfl_Server <- function(id, pool,tables_data, reporting_effort, reporting_effo
             Title,
             Footnotes
           ) %>%
-          dplyr::arrange(report_type, category_name, sub_category_name, population_text, report_ich_number)
+          dplyr::arrange(-Selected, report_type, category_name, sub_category_name, population_text, report_ich_number)
         
         # Debugging: Print the final number of reports
         # cat("Final number of Reports:", nrow(reports), "\n")
@@ -154,6 +154,7 @@ at_tfl_Server <- function(id, pool,tables_data, reporting_effort, reporting_effo
       # Reactive to filter TFL data based on dropdowns and search input
       reports <- reactive({
         req(tfl_data()) # Ensure tfl_data is available
+        refresh_trigger()
         filtered_data <- tfl_data()
         
         # Apply dropdown filters
@@ -213,13 +214,97 @@ at_tfl_Server <- function(id, pool,tables_data, reporting_effort, reporting_effo
         )
       })
       
+    observeEvent(input$select_all, {
+      req(reports())
+      
+      # Update the currently displayed data
+      current_data <- reports() %>%
+        dplyr::mutate(Selected = TRUE)
+      
+        # Render updated table
+        output$reports_table <- renderRHandsontable({
+          rhandsontable(
+            current_data %>%
+              rename(
+                "Selection" = Selected,
+                "Report Type" = report_type,
+                "Report Key" = report_key,
+                "Title Key" = title_key,
+                "Category" = category_name,
+                "Subcategory" = sub_category_name,
+                "ICH Number" = report_ich_number,
+                "Population" = population_text,
+                "Title" = Title,
+                "Footnotes" = Footnotes
+              ),
+            useTypes = TRUE,
+            rowHeaders = FALSE
+          ) %>%
+            hot_col("id", readOnly = TRUE, width = 1) %>%
+            hot_col("Selection", type = "checkbox", halign = "center") %>%
+            hot_table(contextMenu = FALSE)%>%
+            hot_col("Report Type", readOnly = TRUE, halign = "left") %>%
+            hot_col("Report Key", readOnly = TRUE, halign = "left") %>%
+            hot_col("Title Key", readOnly = TRUE, halign = "left") %>%
+            hot_col("Category", readOnly = TRUE, halign = "left") %>%
+            hot_col("Subcategory", readOnly = TRUE, halign = "left") %>%
+            hot_col("ICH Number", readOnly = TRUE, halign = "center") %>%
+            hot_col("Population", readOnly = TRUE, halign = "left") %>%
+            hot_col("Title", readOnly = TRUE, halign = "left", renderer = htmlwidgets::JS("safeHtmlRenderer")) %>%
+            hot_col("Footnotes", readOnly = TRUE, halign = "left", renderer = htmlwidgets::JS("safeHtmlRenderer")) 
+        })
+      })
+
+      observeEvent(input$select_none, {
+        req(reports())
+        
+        # Update the currently displayed data
+        current_data <- reports() %>%
+          dplyr::mutate(Selected = FALSE)
+        
+        # Render updated table
+        output$reports_table <- renderRHandsontable({
+          rhandsontable(
+            current_data %>%
+              rename(
+                "Selection" = Selected,
+                "Report Type" = report_type,
+                "Report Key" = report_key,
+                "Title Key" = title_key,
+                "Category" = category_name,
+                "Subcategory" = sub_category_name,
+                "ICH Number" = report_ich_number,
+                "Population" = population_text,
+                "Title" = Title,
+                "Footnotes" = Footnotes
+              ),
+            useTypes = TRUE,
+            rowHeaders = FALSE
+          ) %>%
+            hot_col("id", readOnly = TRUE, width = 1) %>%
+            hot_col("Selection", type = "checkbox", halign = "center") %>%
+            hot_table(contextMenu = FALSE)%>%
+            hot_col("Report Type", readOnly = TRUE, halign = "left") %>%
+            hot_col("Report Key", readOnly = TRUE, halign = "left") %>%
+            hot_col("Title Key", readOnly = TRUE, halign = "left") %>%
+            hot_col("Category", readOnly = TRUE, halign = "left") %>%
+            hot_col("Subcategory", readOnly = TRUE, halign = "left") %>%
+            hot_col("ICH Number", readOnly = TRUE, halign = "center") %>%
+            hot_col("Population", readOnly = TRUE, halign = "left") %>%
+            hot_col("Title", readOnly = TRUE, halign = "left", renderer = htmlwidgets::JS("safeHtmlRenderer")) %>%
+            hot_col("Footnotes", readOnly = TRUE, halign = "left", renderer = htmlwidgets::JS("safeHtmlRenderer")) 
+        })
+      })
+
+
       # Render rHandsontable
       output$reports_table <- renderRHandsontable({
         req(reports())
+        refresh_trigger()
         # Remove id from display but keep it for backend operations
         reports_data <- reports() %>%
           select(id, Selected, report_type, report_key, title_key, category_name, sub_category_name, report_ich_number, population_text, Title, Footnotes) %>%
-          arrange(report_type, report_key, title_key, category_name, sub_category_name, population_text, report_ich_number)%>%
+          arrange(-Selected, report_type, report_key, title_key, category_name, sub_category_name, population_text, report_ich_number)%>%
           rename(
             "Selection" = Selected,
             "Report Type" = report_type,
