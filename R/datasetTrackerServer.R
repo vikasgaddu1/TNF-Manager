@@ -122,7 +122,15 @@ datasetTrackerServer <- function(id, pool, reporting_effort, ds_type, tables_dat
         rownames = FALSE,
         filter = "top",
         escape = FALSE,
-        options = list(pageLength = 10, autoWidth = TRUE, columnDefs = col_defs),
+        options = list(paging = FALSE,
+                       searching = TRUE,
+                       search = list(
+                         regex = TRUE,    # Enable regex matching
+                         smart = FALSE    # Disable smart (substring) filtering
+                       ),
+                       autoWidth = TRUE,
+                       dom = 'Bfrtip',
+                       columnDefs = col_defs),
         colnames = c(
           "ID" = "id",
           "Dataset Type" = "report_type",
@@ -198,42 +206,13 @@ datasetTrackerServer <- function(id, pool, reporting_effort, ds_type, tables_dat
       # Validate if we have programmers to select from
       prod_prog <- production_programmers()
       qc_prog <- qc_programmers()
-
-      # If no production programmers found, set to empty
-      if (is.null(prod_prog) || nrow(prod_prog) == 0) {
-        prod_choices <- c("Not Assigned" = "")
-      } else {
-        prod_choices <- c(
-          "Not Assigned" = "",
-          setNames(prod_prog$id, prod_prog$username)
-        )
-      }
-
-      # If no QC programmers found, set to empty
-      if (is.null(qc_prog) || nrow(qc_prog) == 0) {
-        qc_choices <- c("Not Assigned" = "")
-      } else {
-        qc_choices <- c(
-          "Not Assigned" = "",
-          setNames(qc_prog$id, qc_prog$username)
-        )
-      }
+      prod_choices <- setNames(prod_prog$id, prod_prog$username)
+      qc_choices <- setNames(qc_prog$id, qc_prog$username)
 
       # Determine the currently selected production programmer's ID
-      current_prod_id <- if (!is.na(row_data$production_programmer) &&
-        row_data$production_programmer != "") {
-        prod_prog$id[prod_prog$username == row_data$production_programmer]
-      } else {
-        "" # Not Assigned
-      }
-
-      # Determine the currently selected QC programmer's ID
-      current_qc_id <- if (!is.na(row_data$qc_programmer) &&
-        row_data$qc_programmer != "") {
-        qc_prog$id[qc_prog$username == row_data$qc_programmer]
-      } else {
-        "" # Not Assigned
-      }
+      current_prod_id <- prod_prog %>% dplyr::filter(username == row_data$production_programmer) %>% dplyr::pull(id)
+      current_qc_id <- qc_prog %>% dplyr::filter(username == row_data$qc_programmer) %>% dplyr::pull(id)
+  
 
       edit_modal <- modalDialog(
         title = "Edit Dataset Programming Details",
@@ -252,7 +231,7 @@ datasetTrackerServer <- function(id, pool, reporting_effort, ds_type, tables_dat
               selected = ifelse(
                 length(current_prod_id) == 1,
                 current_prod_id,
-                ""
+                1
               )
             ),
             dateInput(
@@ -284,7 +263,7 @@ datasetTrackerServer <- function(id, pool, reporting_effort, ds_type, tables_dat
               ns("qc_programmer"),
               "QC Programmer:",
               choices = qc_choices,
-              selected = ifelse(length(current_qc_id) == 1, current_qc_id, "")
+              selected = ifelse(length(current_qc_id) == 1, current_qc_id, 1)
             ),
             dateInput(
               ns("due_date"),
