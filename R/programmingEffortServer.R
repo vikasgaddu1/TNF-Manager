@@ -1,6 +1,7 @@
-programmingEffortServer <- function(id, tracker_data, hidden_cols) {
+programmingEffortServer <- function(id, tracker_data, hidden_cols, col_names) {
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
+
     status_colors <- c(
       "Not Started" = "#E0E0E0",
       "Production Started" = "#BBE1FA",
@@ -72,18 +73,35 @@ programmingEffortServer <- function(id, tracker_data, hidden_cols) {
       due_soon <- data() %>%
         mutate(due_date = as.Date(due_date)) %>%
         filter(due_date <= Sys.Date() + 3 & due_date >= Sys.Date() & status != "QC Pass") %>%
-        select(-any_of(hidden_cols())) # Exclude hidden columns
-      
+        select(-any_of(hidden_cols()))
+
+      # Subset col_names to only include columns that are present in due_soon
+      rename_map <- col_names[col_names %in% names(due_soon)]
+      # Now rename_map is, for example, c("ID" = "id", "Report Type" = "report_type", …)
+
+      # Use rename() with quasiquotation.
+      # Note: rename() expects arguments in the form new_name = old_name.
+      # We convert the character strings (old names) into symbols with rlang::syms.
+      due_soon <- due_soon %>% 
+        rename(!!!setNames(syms(rename_map), names(rename_map)))
       # Render DataTable with conditional formatting for status column
-      datatable(due_soon) %>%
-        DT::formatStyle(
-          "status",
-          target = "row",
-          backgroundColor = DT::styleEqual(
-            names(status_colors),
-            as.vector(status_colors)
-          )
-        )
+      datatable(due_soon, 
+                filter = "top", 
+                escape = FALSE,
+                options = list(paging = FALSE,
+                              searching = TRUE,
+                              search = list(
+                                regex = TRUE,    # Enable regex matching
+                                smart = FALSE    # Disable smart (substring) filtering
+                              ))) %>% 
+                                DT::formatStyle(
+                                "Status",
+                                target = "row",
+                                backgroundColor = DT::styleEqual(
+                                  names(status_colors),
+                                  as.vector(status_colors)
+                                )
+                                )
     })
     
     # Filter data for past due tasks (excluding QC Pass)
@@ -91,10 +109,27 @@ programmingEffortServer <- function(id, tracker_data, hidden_cols) {
       past_due <- data() %>%
         mutate(due_date = as.Date(due_date)) %>%
         filter(due_date < Sys.Date() & status != "QC Pass") %>%
-        select(-any_of(hidden_cols())) # Exclude hidden columns
-      
-      datatable(past_due) %>% 
-        DT::formatStyle("status",
+        select(-any_of(hidden_cols()))
+
+      # Subset col_names to only include columns that are present in past_due
+      rename_map <- col_names[col_names %in% names(past_due)]
+      # Now rename_map is, for example, c("ID" = "id", "Report Type" = "report_type", …)
+
+      # Use rename() with quasiquotation.
+      # Note: rename() expects arguments in the form new_name = old_name.
+      # We convert the character strings (old names) into symbols with rlang::syms.
+      past_due <- past_due %>% 
+        rename(!!!setNames(syms(rename_map), names(rename_map)))
+      datatable(past_due, 
+                filter = "top", 
+                escape = FALSE,
+                options = list(paging = FALSE,
+                              searching = TRUE,
+                              search = list(
+                                regex = TRUE,    # Enable regex matching
+                                smart = FALSE    # Disable smart (substring) filtering
+                                ))) %>% 
+        DT::formatStyle("Status",
                         target = "row",
                         backgroundColor = DT::styleEqual(
                           names(status_colors),
