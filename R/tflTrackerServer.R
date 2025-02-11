@@ -1,17 +1,53 @@
 tflTrackerServer <- function(id, pool, reporting_effort,tables_data,reporting_effort_label) {
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
-    
     # refresh trigger
     refresh_trigger <- reactiveVal(0)
-    
-    tracker_data <- reactive({
+    # Create a named vector mapping statuses to colors
+    colorMap <- c(
+      "Not Started"        = "#E0E0E0",
+      "Production Started" = "#BBE1FA",
+      "Production Ready"   = "#C8E6C9",
+      "Under QC"           = "#FFF9C4",
+      "QC Failed"          = "#FFCDD2",
+      "QC Pass"            = "#A5D6A7"
+    )
+
+    colnames <- c(
+          "ID" = "id",
+          "Report Type" = "report_type",
+          "Category" = "category_name",
+          "Subcategory" = "sub_category_name",
+          "Report Key" = "report_key",
+          "Title Key" = "title_key",
+          "Titles" = "titles",
+          "Footnotes" = "footnotes",
+          "ICH Number" = "report_ich_number",
+          "Population" = "population_text",
+          "Production Programmer" = "production_programmer",
+          "Assign Date" = "assign_date",
+          "Assigned Validation Level" = "qc_level",
+          "QC Programmer" = "qc_programmer",
+          "Due Date" = "due_date",
+          "Priority" = "priority",
+          "Status" = "status",
+          "Comments" = "comments"
+        )
+    tfl_tracker_data <- reactive({
       req(reporting_effort(), tables_data)
       refresh_trigger()
+      titles <- tables_data$report_titles() %>%
+        dplyr::left_join(tables_data$titles(), join_by(title_id == id)) %>%
+        dplyr::group_by(report_id) %>%
+        dplyr::summarise(titles = paste(title_text, collapse = "<br>"), .groups = "drop")
+
+      footnotes <- tables_data$report_footnotes() %>%
+        dplyr::left_join(tables_data$footnotes(), join_by(footnote_id == id)) %>%
+        dplyr::group_by(report_id) %>%
+        dplyr::summarise(footnotes = paste(footnote_text, collapse = "<br>"), .groups = "drop")
       # Use dplyr to merge tables
         data <- tables_data$report_programming_tracker() %>%
           dplyr::filter(
-            reporting_effort_id == reporting_effort() & 
             report_type %in% c('Table', 'Listing', 'Figure')
           ) %>%
           dplyr::inner_join(tables_data$reporting_efforts(), join_by(reporting_effort_id == id)) %>%
@@ -27,22 +63,8 @@ tflTrackerServer <- function(id, pool, reporting_effort,tables_data,reporting_ef
             tables_data$users() %>% dplyr::rename(qc_programmer = username),
             join_by(qc_programmer_id == id)
           ) %>%
-          dplyr::mutate(
-            titles = purrr::map_chr(id, ~ {
-              tables_data$report_titles() %>%
-                dplyr::filter(report_id == .x) %>%
-                dplyr::inner_join(tables_data$titles(), join_by(title_id == id)) %>%
-                dplyr::pull(title_text) %>%
-                paste(collapse = "<br>")
-            }),
-            footnotes = purrr::map_chr(id, ~ {
-              tables_data$report_footnotes() %>%
-                dplyr::filter(report_id == .x) %>%
-                dplyr::inner_join(tables_data$footnotes(), join_by(footnote_id == id)) %>%
-                dplyr::pull(footnote_text) %>%
-                paste(collapse = "<br>")
-            })
-          ) %>%
+          dplyr::left_join(titles, join_by(report_id == report_id)) %>%
+          dplyr::left_join(footnotes, join_by(report_id == report_id)) %>%
           dplyr::left_join(
             tables_data$comments() %>%
               dplyr::group_by(report_programming_tracker_id) %>%
@@ -53,14 +75,39 @@ tflTrackerServer <- function(id, pool, reporting_effort,tables_data,reporting_ef
               ),
             join_by(id == report_programming_tracker_id)
           ) %>%
+          dplyr::left_join(
+            tables_data$custom_footnotes() %>%
+              dplyr::inner_join(tables_data$footnotes(), join_by(footnote_id == id)) %>%
+              dplyr::group_by(report_programming_tracker_id) %>%
+              dplyr::summarise(
+                custom_footnotes = paste(footnote_text, collapse = "<br>"),
+                .groups = "drop"
+              ),
+            join_by(id == report_programming_tracker_id)
+          ) %>%
+          dplyr::left_join(
+            tables_data$custom_populations() %>%
+              dplyr::inner_join(tables_data$populations(), join_by(population_id == id)) %>%
+              dplyr::rename(custom_populations = population_text) %>%
+              dplyr::select(report_programming_tracker_id, custom_populations),
+            join_by(id == report_programming_tracker_id)
+          )%>%
+          dplyr::mutate(
+            footnotes = coalesce(custom_footnotes, footnotes),
+            population_text = coalesce(custom_populations, population_text)
+          ) %>%
           dplyr::arrange(desc(priority), assign_date) %>%
           dplyr::select(
+            study,
+            database_release,
+            reporting_effort,
             report_type,
             category_name,
             sub_category_name,
             report_key,
             title_key,
             titles,
+            footnotes,
             report_ich_number,
             population_text,
             production_programmer,
@@ -75,36 +122,30 @@ tflTrackerServer <- function(id, pool, reporting_effort,tables_data,reporting_ef
             reporting_effort_id, 
             report_id,
             production_programmer_id,
-            qc_programmer_id,
-            study,
-            database_release,
-            reporting_effort,
+            qc_programmer_id,              
             report_category_id,
             report_sub_category_id,
             population_id,
             category_id,
-            suggested_ich_number,
-            role.x,
-            role.y,
-            footnotes
+            suggested_ich_number
           ) %>% 
-          #sort by report_type, priority, report_key, title_key
-          dplyr::arrange(report_type, priority, report_key, title_key)
+          #sort by priority, report_type, report_key, title_key
+          dplyr::arrange(priority,report_type, report_key, title_key)
+
+          # print(data %>% dplyr::filter(id == 1670))
+          return(data)
+    })
+
+    tracker_data <- reactive({
+      req(tfl_tracker_data())
+      tfl_tracker_data() %>% dplyr::filter(reporting_effort_id == reporting_effort())
     })
 
     
-    programmingEffortServer("programming_effort", tracker_data, reactive(input$column_selection))
 
-    production_programmers <- reactive({
-      tables_data$users() %>%
-        dplyr::select(id, username)
-    })
-    
-    qc_programmers <- reactive({
-      tables_data$users() %>%
-        dplyr::select(id, username)
-    })
-    
+    programmingEffortServer("programming_effort", tracker_data, reactive(input$column_selection), colnames)
+
+
     
     observeEvent(tracker_data(), {
       col_names <- colnames(tracker_data())
@@ -128,7 +169,9 @@ tflTrackerServer <- function(id, pool, reporting_effort,tables_data,reporting_ef
           "suggested_ich_number",
           "role.x",
           "role.y",
-          "footnotes"
+          "report_key",
+          "sub_category_name",
+          "report_ich_number"
 
         ) # Default hidden column
       )
@@ -159,7 +202,7 @@ tflTrackerServer <- function(id, pool, reporting_effort,tables_data,reporting_ef
     )
     
    
-    output$tracker_table <- renderDT({
+output$tracker_table <- renderDT({
       req(tracker_data())
       df <- tracker_data() 
   
@@ -178,56 +221,37 @@ tflTrackerServer <- function(id, pool, reporting_effort,tables_data,reporting_ef
       # allow html in comments column
       DT::datatable(
         df,
-        selection = "single",
+        selection = "multiple",
         rownames = FALSE,
         filter = "top",
         escape = FALSE,
+
         options = list(
-          pageLength = 10,
+          paging = FALSE,
+          searching = TRUE,
+          search = list(
+            regex = TRUE,    # Enable regex matching
+            smart = FALSE    # Disable smart (substring) filtering
+          ),
           autoWidth = TRUE,
+          scrollX = TRUE,
+          select = TRUE,  # Enable row selection (required for the buttons to work)
+          responsive = TRUE,  
+          dom = 'frtip',
           columnDefs = col_defs
+
         ),
-        colnames = c(
-          "Report Type" = "report_type",
-          "Category" = "category_name",
-          "Subcategory" = "sub_category_name",
-          "Report Key" = "report_key",
-          "Title Key" = "title_key",
-          "Titles" = "titles",
-          "ICH Number" = "report_ich_number",
-          "Population" = "population_text",
-          "Production Programmer" = "production_programmer",
-          "Assign Date" = "assign_date",
-          "Assigned Validation Level" = "qc_level",
-          "QC Programmer" = "qc_programmer",
-          "Due Date" = "due_date",
-          "Priority" = "priority",
-          "Status" = "status",
-          "Comments" = "comments"
-        )) %>%
+        colnames = colnames) %>%
               DT::formatDate("Assign Date", method = "toLocaleDateString") %>%
               DT::formatDate("Due Date", method = "toLocaleDateString") %>%
               DT::formatStyle("Status",
                               target = "row",
                               backgroundColor = DT::styleEqual(
-                                c(
-                                  "Not Started",
-                                  "Production Started",
-                                  "Production Ready",
-                                  "Under QC",
-                                  "QC Failed",
-                                  "QC Pass"
-                                ),
-                                c(
-                                  "#E0E0E0",
-                                  "#BBE1FA",
-                                  "#C8E6C9",
-                                  "#FFF9C4",
-                                  "#FFCDD2",
-                                  "#A5D6A7"
-                                )
+                                names(colorMap),
+                                unname(colorMap)
                               ))
           })
+    
     
     # Storing selected_id for update
     selected_id <- reactiveVal(NULL)
@@ -243,216 +267,10 @@ tflTrackerServer <- function(id, pool, reporting_effort,tables_data,reporting_ef
         }
       })
     commentsServer("comments", pool,tables_data, selected_id)
-
-    observeEvent(input$edit_button, {
-      selected_row <- input$tracker_table_rows_selected
-
-      if (is.null(selected_row) || length(selected_row) == 0) {
-        show_toast(
-          title = "Edit Report Programming Details",
-          type = "info",
-          text = "Please select a row before editing.",
-          position = "center"
-        )
-        return()
-      } 
-     
-      df <- tracker_data()
-      row_data <- df[selected_row, ]
- 
-      # Validate if we have programmers to select from
-      prod_prog <- production_programmers()
-      qc_prog <- qc_programmers()
-      
-      # If no production programmers found, set to empty
-      if (is.null(prod_prog) || nrow(prod_prog) == 0) {
-        prod_choices <- c("Not Assigned" = "")
-      } else {
-        prod_choices <- c("Not Assigned" = "",
-                          setNames(prod_prog$id, prod_prog$username))
-      }
-      
-      # If no QC programmers found, set to empty
-      if (is.null(qc_prog) || nrow(qc_prog) == 0) {
-        qc_choices <- c("Not Assigned" = "")
-      } else {
-        qc_choices <- c("Not Assigned" = "",
-                        setNames(qc_prog$id, qc_prog$username))
-      }
-      
-      # Determine the currently selected production programmer's ID
-      current_prod_id <- if (!is.na(row_data$production_programmer) &&
-                             row_data$production_programmer != "") {
-        prod_prog$id[prod_prog$username == row_data$production_programmer]
-      } else {
-        ""  # Not Assigned
-      }
-      
-      # Determine the currently selected QC programmer's ID
-      current_qc_id <- if (!is.na(row_data$qc_programmer) &&
-                           row_data$qc_programmer != "") {
-        qc_prog$id[qc_prog$username == row_data$qc_programmer]
-      } else {
-        ""  # Not Assigned
-      }
-      
-      edit_modal <- modalDialog(
-        title = "Edit Report Programming Details",
-        easyClose = TRUE,
-        footer = tagList(
-          actionButton(ns("save_changes"), "Save", class = "btn btn-success"),
-          modalButton("Cancel")
-        ),
-        
-        fluidRow(
-          column(
-            width = 6,
-            selectInput(
-              ns("production_programmer"),
-              "Production Programmer:",
-              choices = prod_choices,
-              selected = ifelse(length(current_prod_id) == 1, current_prod_id, "")
-            ),
-            dateInput(
-              ns("assign_date"),
-              "Assign Date:",
-              value = if(is.na(row_data$assign_date)) {
-                Sys.Date()
-              } else {
-                as.Date(row_data$assign_date, format = "%Y-%m-%d")
-              }),
-            selectInput(
-              ns("status"),
-              "Status:",
-              choices = c(
-                "Not Started",
-                "Production Started",
-                "Production Ready",
-                "Under QC",
-                "QC Failed",
-                "QC Pass"
-              ),
-              selected = ifelse(is.na(row_data$status), "Not Started", row_data$status)
-            )
-          ),
-          column(
-            width = 6,
-            selectInput(
-              ns("qc_programmer"),
-              "QC Programmer:",
-              choices = qc_choices,
-              selected = ifelse(length(current_qc_id) == 1, current_qc_id, "")
-            ),
-            dateInput(
-              ns("due_date"),
-              "Due Date:",
-              value = if(is.na(row_data$due_date)) {
-                Sys.Date() + 7
-              } else {
-                as.Date(row_data$due_date, format = "%Y-%m-%d")
-              }
-            ),  
-            selectInput(
-              ns("qc_level"),
-              "Assigned Validation Level:",
-              choices = 1:3,
-              selected = ifelse(
-                is.na(row_data$qc_level),
-                3,
-                as.integer(row_data$qc_level)
-              )
-            ),
-            selectInput(
-              ns("priority"),
-              "Priority (1 <- Highest 5 <- Lowest):",
-              choices = 1:5,
-              # Numeric range
-              selected = ifelse(
-                is.na(row_data$priority),
-                1,
-                as.integer(row_data$priority)
-              )
-            )
-          )
-        )
-      )
-      
-      showModal(edit_modal)
-    })
+    editPopulationServer("edit_population", pool, tables_data, selected_id)
+    editCustomFootnoteServer("edit_fn_button", pool, tables_data, selected_id)
+    assignTaskServer("assign_task", pool, tables_data, selected_id, tracker_data)
     
-    observeEvent(input$save_changes, { 
-      prod_id <- input$production_programmer
-      qc_id <- input$qc_programmer
-      assign_date <- input$assign_date
-      due_date <- input$due_date
-      priority <- input$priority
-      status <- input$status
-      qc_level <- input$qc_level
-      
-          
-      if (prod_id == qc_id) {
-        show_toast(
-          title = "Edit Report Programming Details",
-          type = "error",
-          text = "Production and QC programmer cannot be the same person.",
-          position = "center"
-        )
-        return()
-      }
-      
-      if (due_date <= assign_date) {
-        show_toast(
-          title = "Edit Report Programming Details",
-          type = "error",
-          text = "Due date must be after the assign date.",
-          position = "center"
-        )
-        return()
-      }
-
-      tryCatch({
-        poolWithTransaction(pool, function(conn) {
-          dbExecute(
-            conn,
-            "UPDATE report_programming_tracker
-         SET production_programmer_id = ?,
-             assign_date = ?,
-             qc_programmer_id = ?,
-             due_date = ?,
-             priority = ?,
-             status = ?,
-             qc_level = ?,
-             updated_at = CURRENT_TIMESTAMP
-         WHERE id = ? ;",
-            params = list(
-              prod_id,
-              as.character(assign_date),
-              qc_id,
-              as.character(due_date),
-              as.integer(priority),
-              status,
-              as.integer(qc_level),
-              selected_id()
-            )
-          )
-        })
-
-         refresh_trigger(refresh_trigger() + 1)
-        show_toast(
-          title = "Edit Report Programming Details",
-          type = "success",
-          text = "Record updated successfully.",
-          position = "center"
-        )
-        removeModal()}, error = function(e) {
-        show_toast(
-          title = "Edit Report Programming Details",
-          type = "error",
-          text = paste("Error updating record:", e$message),
-          position = "center"
-        )
-      })
-    })
-    
+    return(tfl_tracker_data)
   })
 }
