@@ -33,12 +33,12 @@ associateTask_RE_UI <- function(id, title) {
         ),
         tabPanel(
           "SDTM",
-          at_dataset_UI(id = ns("at_sdtm"),"SDTM"),
+          at_dataset_UI(id = ns("at_sdtm")),
           icon = icon("table")
         ),
         tabPanel(
           "ADaM",
-          at_dataset_UI(id = ns("at_adam"),"ADaM"),
+          at_dataset_UI(id = ns("at_adam")),
           icon = icon("table")
         )
       )
