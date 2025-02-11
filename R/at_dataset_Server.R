@@ -1,15 +1,19 @@
-at_dataset_Server <- function(id, pool,tables_data, reporting_effort, reporting_effort_label, ds_type) {
+at_dataset_Server <- function(id, pool, tables_data, reporting_effort, reporting_effort_label, ds_type) {
   moduleServer(
     id,
     function(input, output, session) {
       ns <- session$ns
-      
+
       refresh_trigger <- reactiveVal(0)
+      # Get all reporting efforts except the current one
+      refresh_trigger <- at_Copy_Server("copy_reporting_effort", tables_data, reporting_effort, reporting_effort_label, ds_type, pool, refresh_trigger)
+
+
       # Trigger to refresh data
       observeEvent(refresh_trigger(), {
         tryCatch({
           poolWithTransaction(pool, function(conn) {
-            # Step 1: Insert Missing Records
+            # Sync tracker data by inserting missing records and deleting orphaned ones
             dbExecute(conn, "
               INSERT INTO report_programming_tracker (
                   reporting_effort_id, 
@@ -17,25 +21,23 @@ at_dataset_Server <- function(id, pool,tables_data, reporting_effort, reporting_
                   report_type,
                   production_programmer_id, 
                   qc_programmer_id, 
+                  qc_level,
                   assign_date, 
                   due_date, 
                   priority, 
-                  status,
-                  qc_level,
-                  updated_at
+                  status
               )
               SELECT 
                   rer.reporting_effort_id,
                   rer.report_id,
                   rer.report_type,
-                  1,  -- Default value for production_programmer_id
-                  1,  -- Default value for qc_programmer_id
-                  NULL,  -- Default assign_date
-                  NULL,  -- Default due_date
-                  5,     -- Default priority (lowest)
-                  'Not Started',  -- Default status
-                  3,     -- Default qc_level
-                  CURRENT_TIMESTAMP
+                  1, -- Default value for production_programmer_id
+                  1, -- Default value for qc_programmer_id
+                  3, -- Default qc_level
+                  NULL, -- Default assign_date
+                  NULL, -- Default due_date
+                  5, -- Default priority
+                  'Not Started' -- Default status
               FROM 
                   reporting_effort_reports rer
               LEFT JOIN 
@@ -46,201 +48,281 @@ at_dataset_Server <- function(id, pool,tables_data, reporting_effort, reporting_
                   AND rer.report_type = rpt.report_type
               WHERE 
                   rpt.report_id IS NULL AND rer.report_type = ?;",
-                      params = list(ds_type)
+              params = list(ds_type)
             )
-            
-            # Step 2: Delete Orphaned Records
+
             dbExecute(conn, "
               DELETE FROM report_programming_tracker
-                WHERE report_type = ? AND NOT EXISTS (
+              WHERE report_type = ?
+                AND NOT EXISTS (
                   SELECT 1
                   FROM reporting_effort_reports
                   WHERE reporting_effort_reports.reporting_effort_id = report_programming_tracker.reporting_effort_id
-                        AND reporting_effort_reports.report_id = report_programming_tracker.report_id 
-                        AND reporting_effort_reports.report_type = report_programming_tracker.report_type
-                        AND report_type = ?);",
-                      params = list(ds_type, ds_type)
+                    AND reporting_effort_reports.report_id = report_programming_tracker.report_id 
+                    AND reporting_effort_reports.report_type = report_programming_tracker.report_type
+                );",
+              params = list(ds_type)
             )
           })
-          
+
           showNotification("Tracker data synced successfully.", type = "message")
-          
         }, error = function(e) {
-          showNotification(paste("Error ensuring tracker data consistency:", e$message), type = "error")
+          showNotification(paste("Error syncing tracker data:", e$message), type = "error")
         })
       })
-      
-      # Reactive to fetch and cache dataset data from the database
+
       dataset_data <- reactive({
         req(reporting_effort())
         refresh_trigger()
-        # Debugging: Print column names of datasets
-        # cat("Columns in datasets:", names(tables_data$datasets()), "\n")
-        
-        # Debugging: Print column names of reporting_effort_reports
-        # cat("Columns in reporting_effort_reports:", names(tables_data$reporting_effort_reports()), "\n")
-        
+
         tables_data$datasets() %>%
           dplyr::left_join(
             tables_data$reporting_effort_reports() %>%
-              dplyr::filter(reporting_effort_id == reporting_effort()), 
-            join_by(id == report_id, dataset_type == report_type)
+              dplyr::filter(reporting_effort_id == reporting_effort()),
+            by = c("id" = "report_id", "dataset_type" = "report_type")
           ) %>%
           dplyr::filter(dataset_type == ds_type) %>%
           dplyr::mutate(Selected = !is.na(reporting_effort_id) & reporting_effort_id == reporting_effort()) %>%
-          dplyr::select(Selected, id, dataset_name, dataset_label, dataset_type, category_name) %>%
+          dplyr::select(id, Selected, dataset_type,category_name, dataset_name, dataset_label) %>%
           dplyr::rename(
-            `Dataset Name` = dataset_name, 
-            `Dataset Label` = dataset_label, 
-            `Dataset Type` = dataset_type, 
-            Category = category_name
+            `Report Type` = dataset_type,
+            `Category` = category_name,
+            `Dataset Name` = dataset_name,
+            `Dataset Label` = dataset_label
           ) %>%
-          dplyr::arrange(`Dataset Type`, Category, `Dataset Name`)
+          dplyr::arrange(-Selected, Category, `Dataset Name`)
       })
-      
-      # Reactive to filter dataset data based on dropdowns and search input
-      datasets <- reactive({
-        req(dataset_data())
-        filtered_data <- dataset_data()
-        
-        if (!is.null(input$category) && input$category != "All") {
-          filtered_data <- filtered_data %>%
-            dplyr::filter(Category == input$category)
-        }
-        
-        if (!is.null(input$search) && input$search != "") {
-          filtered_data <- filtered_data %>%
-            dplyr::filter_at(vars(`Dataset Name`, `Dataset Type`, Category),
-                             any_vars(stringr::str_detect(., stringr::fixed(input$search, ignore_case = TRUE))))
-        }
-        
-        filtered_data
-      })
-      
-      # Dynamically update dropdowns
-      output$category_select <- renderUI({
-        req(dataset_data())
-        selectInput(
-          ns("category"),
-          label = "Category",
-          choices = c("All", unique(dataset_data()$Category)),
-          selected = "All"
-        )
-      })
-      
-      # Render rHandsontable
-      output$datasets_table <- renderRHandsontable({
-        req(datasets())
-        datasets_data <- datasets() %>%
-          select(id, Selected, `Dataset Type`, `Dataset Name`, `Dataset Label`, Category) %>%
-          arrange(`Dataset Type`, `Dataset Name`, `Dataset Label`, Category)
-        
-        rhandsontable(
-          datasets_data,
-          useTypes = TRUE,
-          rowHeaders = FALSE
-        ) %>%
-          hot_col("id", readOnly = TRUE, width = 1) %>%
-          hot_col("Selected", type = "checkbox", halign = "center") %>%
-          hot_col("Dataset Type", readOnly = TRUE, halign = "left") %>%
-          hot_col("Dataset Name", readOnly = TRUE, halign = "left") %>%
-          hot_col("Dataset Label", readOnly = TRUE, halign = "left") %>%
-          hot_col("Category", readOnly = TRUE, halign = "left") %>%
-          hot_table(contextMenu = FALSE)
-      })
-      
-      output$download_tnf <- downloadHandler(
+
+ # download handler for selected rows  as xlsx 
+      output$download_dataset <- downloadHandler(
         filename = function() {
-          req(reporting_effort_label()) # Ensure the reactive value is available
-          paste0(ds_type,"_", reporting_effort_label(), "_", Sys.Date(), ".xlsx")
+          paste0(ds_type, "_" , reporting_effort_label(), "_", Sys.Date(), ".xlsx")
         },
         content = function(file) {
-          df <- dataset_data() %>%
-            dplyr::filter(Selected) %>%
-            dplyr::select(-c('Selected', 'id')) # Remove Selected and ID column
+          df <- dataset_data() %>% filter(Selected) %>%
+          dplyr::select(-c(id, Selected))
           
-          req(df) # Ensure data is available
-          
+
+
           # Check if data is available
-          if (nrow(df) == 0) {
-            show_toast(
+          if (is.null(df) || nrow(df) == 0) {
+            showModal(modalDialog(
               title = "Warning",
-              type = "warning",
-              text = "No data available to download.",
-              position = "top-end"
-            )
+              "No data available to download.",
+              easyClose = TRUE,
+              footer = NULL
+            ))
             return(NULL)
           }
           
           # Write data to an Excel file
-          openxlsx::write.xlsx(df, file)
+          write.xlsx(df, file)
         }
       )
-      
-      # Save Selection
-      observeEvent(input$save_selection, {
-        req(reporting_effort())
-        
-        tryCatch({
-          edited_data <- hot_to_r(input$datasets_table)
-          edited_data <- dplyr::left_join(
-            dataset_data(), 
-            edited_data %>% dplyr::select(id, Selected), 
-            by = "id"
-          ) %>%
-            dplyr::mutate(
-              Selected = ifelse(is.na(Selected.y), Selected.x, Selected.y)
-            ) %>%
-            dplyr::select(-Selected.x, -Selected.y)
-          
-          edited_data <- edited_data %>%
-            dplyr::rename(report_type = `Dataset Type`)
-          
+
+      output$datasets_table <- renderDT({
+        req(dataset_data())
+
+        datatable(
+          dataset_data(),
+          escape = FALSE,
+          filter = "top",
+          options = list(
+            paging = FALSE,
+            searching = TRUE,
+            search = list(
+              regex = TRUE,    # Enable regex matching
+              smart = FALSE    # Disable smart (substring) filtering
+            ),
+            autoWidth = TRUE,
+            dom = 'frtip',
+            columnDefs = list(
+              list(targets = c(0, 1,2), visible = FALSE) # Hide ID and Selected columns 
+            )
+          ),
+          selection = "multiple"
+        ) %>%
+          formatStyle(
+            'Selected',
+            target = 'row',
+            backgroundColor = styleEqual(c(TRUE, FALSE), c('lightblue', 'white'))
+          )
+      })
+
+      observeEvent(input$select_highlighted, {
+        req(dataset_data())
+        current_data <- dataset_data()
+        selected_rows <- input$datasets_table_rows_selected  
+        highlighted_ids <- current_data[selected_rows, ]$id
+        to_insert <- current_data %>%
+          filter(id %in% highlighted_ids & !Selected) 
+        if (nrow(to_insert) == 0) {
+          showToast("info", "No rows are highlighted.")
+        } else {
+          tryCatch({
+            poolWithTransaction(pool, function(conn) {
+              dbExecute(conn, paste(  
+                "INSERT INTO reporting_effort_reports (reporting_effort_id, report_id, report_type, updated_at) VALUES ",
+                paste(sprintf("(%s, %s, '%s', CURRENT_TIMESTAMP)", 
+                              reporting_effort(), 
+                              to_insert$id, 
+                              ds_type),
+                      collapse = ",")
+              ))
+            })  
+
+            refresh_trigger(refresh_trigger() + 1)
+            showToast("success", "Highlighted rows saved successfully.")
+          }, error = function(e) {
+            showToast("error", paste("Error saving highlighted rows:", e$message))
+          })
+        }
+      })
+
+      observeEvent(input$deselect_highlighted, {
+        req(dataset_data())
+        current_data <- dataset_data()
+        selected_rows <- input$datasets_table_rows_selected  
+        highlighted_ids <- current_data[selected_rows, ]$id
+        to_delete <- current_data %>%
+          filter(id %in% highlighted_ids & Selected)
+        if (nrow(to_delete) == 0) {
+          showToast("info", "No rows are highlighted.")
+        } else {
+          # add ask_confirmation  
+          ask_confirmation(
+            inputId = "confirm_deselect",
+            title = "Confirm Action",
+            text = "Are you sure you want to deselect all highlighted rows?",
+            type = "warning",
+            btn_labels = c("Cancel", "Confirm"),
+            btn_colors = c("#6C757D", "#DC3545")
+          )
+        }
+      })
+
+      observeEvent(input$confirm_deselect, {
+        req(input$confirm_deselect)
+        current_data <- dataset_data()
+        selected_rows <- input$datasets_table_rows_selected  
+        highlighted_ids <- current_data[selected_rows, ]$id
+        to_delete <- current_data %>%
+          filter(id %in% highlighted_ids & Selected)
+          if (nrow(to_delete) == 0) {
+            showToast("info", "No rows to delete.")
+          } else {
+            tryCatch({
+              poolWithTransaction(pool, function(conn) {
+                dbExecute(conn, paste(
+                        "DELETE FROM reporting_effort_reports WHERE ",
+                        paste(sprintf("(reporting_effort_id = %s AND report_id = %s AND report_type = '%s')", 
+                                      reporting_effort(), 
+                                      to_delete$id, 
+                                      ds_type),
+                              collapse = " OR ")
+                      ))
+                    })
+
+                    refresh_trigger(refresh_trigger() + 1)
+                    showToast("success", "Highlighted rows deselected successfully.")
+                  }, error = function(e) {
+              showToast("error", paste("Error deselecting highlighted rows:", e$message))
+            })
+          }
+        })
+
+      observeEvent(input$select_all_visible, {
+        req(dataset_data())
+        current_data <- dataset_data()
+        selected_rows <- input$datasets_table_rows_all 
+        visible_ids <- current_data[selected_rows, ]$id
+        if (length(visible_ids) == 0) {
+          showToast("info", "No rows are visible.")
+        } else {
+          ask_confirmation(
+            inputId = "confirm_select_all_visible",
+            title = "Confirm Action",
+            text = "Are you sure you want to select all visible rows?",
+            type = "warning",
+            btn_labels = c("Cancel", "Confirm"),
+            btn_colors = c("#6C757D", "#DC3545")
+          )
+        }
+      })
+
+      observeEvent(input$confirm_select_all_visible, {
+        req(input$confirm_select_all_visible)
+        current_data <- dataset_data()
+        visible_ids <- current_data[input$datasets_table_rows_all, ]$id
+        to_insert <- current_data %>%
+          filter(id %in% visible_ids & !Selected)
+        if (nrow(to_insert) == 0) {
+          showToast("info", "No rows to insert.")
+        } else {
           tryCatch({
             poolWithTransaction(pool, function(conn) {
               dbExecute(conn, paste(
-                "DELETE FROM reporting_effort_reports WHERE reporting_effort_id = ",
-                reporting_effort(), " AND report_type = ?", ";"
-              ), params = list(ds_type))
-            })
-          }, error = function(e) {
-            showNotification(paste("Error deleting existing associations:", e$message), type = "error")
-          })
-          
-          selected_datasets <- edited_data %>%
-            dplyr::filter(Selected)
-          
-          if (nrow(selected_datasets) > 0) {
-            query_reporting_effort <- paste(
               "INSERT INTO reporting_effort_reports (reporting_effort_id, report_id, report_type, updated_at) VALUES ",
-              paste(
-                sprintf("(%s, %s, '%s', CURRENT_TIMESTAMP)", 
-                        reporting_effort(), 
-                        selected_datasets$id, 
-                        selected_datasets$report_type),
-                collapse = ","
-              )
+              paste(sprintf("(%s, %s, '%s', CURRENT_TIMESTAMP)", 
+                            reporting_effort(), 
+                            to_insert$id, 
+                            ds_type),
+                    collapse = ",")
+              ))
+            })
+
+            refresh_trigger(refresh_trigger() + 1)
+            showToast("success", "Visible rows selected successfully.")
+          }, error = function(e) {
+            showToast("error", paste("Error selecting visible rows:", e$message))
+          })
+        }
+      })  
+
+# Deselect All Visible Rows
+      observeEvent(input$deselect_all_visible, {
+        req(dataset_data())
+        current_data <- dataset_data()
+        visible_ids <- current_data[input$datasets_table_rows_all, ]$id
+          if (length(visible_ids) == 0) {
+            showToast("info", "No rows are visible.")
+          } else {
+            ask_confirmation(
+              inputId = "confirm_deselect_all_visible",
+              title = "Confirm Action",
+              text = "Are you sure you want to deselect all visible rows?",
+              type = "warning",
+              btn_labels = c("Cancel", "Confirm"),
+              btn_colors = c("#6C757D", "#DC3545")
             )
+          }
+      })
+
+      observeEvent(input$confirm_deselect_all_visible, {
+        req(input$confirm_deselect_all_visible)
+        current_data <- dataset_data()
+        visible_ids <- current_data[input$datasets_table_rows_all, ]$id
+        to_delete <- current_data %>%
+          filter(id %in% visible_ids & Selected)
+          if (nrow(to_delete) == 0) {
+            showToast("info", "No rows to delete.")
+          } else {
             tryCatch({
               poolWithTransaction(pool, function(conn) {
-                dbExecute(conn, query_reporting_effort)
+                dbExecute(conn, paste(
+                  "DELETE FROM reporting_effort_reports WHERE reporting_effort_id = ", 
+                  reporting_effort(),
+                  " AND report_id IN (", paste(to_delete$id, collapse = ","), ")"
+                ))
               })
-            }, error = function(e) {
-              showNotification(paste("Error inserting new associations:", e$message), type = "error")
-            })
-          }
-          
-          refresh_trigger(refresh_trigger() + 1)
-          show_toast(
-            title = "Save",
-            type = "success",
-            text = "Selection saved successfully!",
-            position = "center"
-          )
-        }, error = function(e) {
-          showNotification(paste("Error during save operation:", e$message), type = "error")
-        })
+
+            refresh_trigger(refresh_trigger() + 1)
+            showToast("success", "All visible rows deselected.")
+          }, error = function(e) {
+            showToast("error", paste("Error deselecting all visible rows:", e$message))
+          })
+        }
       })
-    }
-  )
+
+    })
 }
