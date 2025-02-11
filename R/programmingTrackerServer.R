@@ -35,9 +35,10 @@ programmingTrackerServer <- function(id, pool, tables_data) {
         dplyr::pull(label)
     })
     
-      tflTrackerServer("tfl_tracker", pool, reactive(input$reporting_effort),tables_data, selected_reporting_effort_label)
-      datasetTrackerServer("sdtm_tracker", pool, reactive(input$reporting_effort),"SDTM",tables_data, selected_reporting_effort_label)
-      datasetTrackerServer("adam_tracker", pool, reactive(input$reporting_effort),"ADaM",tables_data, selected_reporting_effort_label)
+      tfl_tracker_data <- tflTrackerServer("tfl_tracker", pool, reactive(input$reporting_effort),tables_data, selected_reporting_effort_label)
+      sdtm_tracker_data <- datasetTrackerServer("sdtm_tracker", pool, reactive(input$reporting_effort),"SDTM",tables_data, selected_reporting_effort_label)
+      adam_tracker_data <- datasetTrackerServer("adam_tracker", pool, reactive(input$reporting_effort),"ADaM",tables_data, selected_reporting_effort_label)
     
+      return(list(tfl_tracker_data, sdtm_tracker_data, adam_tracker_data))
   })
 }

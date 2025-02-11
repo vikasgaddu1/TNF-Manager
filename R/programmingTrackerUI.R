@@ -31,7 +31,7 @@ programmingTrackerUI <- function(id, title = "Programming Tracker") {
       tabPanel(
         "TFL Tracker",
         icon = icon("table"),
-        trackerUI(ns("tfl_tracker"))
+        tflTrackerUI(ns("tfl_tracker"))
       ),
       tabPanel(
         "SDTM Tracker",
