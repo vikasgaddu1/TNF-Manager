@@ -554,10 +554,8 @@ reportCRUDServer <- function(id, pool, tables_data) {
           pull(id)
         
         sub_category_id <- tables_data$sub_categories() %>%
-          filter(
-            sub_category_name == input$sub_category_name,
-            category_id == category_id
-          ) %>%
+          filter(sub_category_name == input$sub_category_name) %>%
+          inner_join(tables_data$categories() %>% filter(category_name == input$category_name) , by = c("category_id" = "id")) %>%
           pull(id)
         
         population_id <- tables_data$populations() %>%
@@ -574,7 +572,8 @@ reportCRUDServer <- function(id, pool, tables_data) {
           footnotes_data <- tables_data$footnotes() %>%
             filter(footnote_text %in% input$footnotes)
         }
-        
+      
+
         poolWithTransaction(pool, function(conn) {
           # Update main report
           dbExecute(
