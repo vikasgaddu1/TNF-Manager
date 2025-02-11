@@ -1,4 +1,74 @@
-#dbPoolCon <- dbPool(RSQLite::SQLite(), dbname = "data/database.sqlite", create = TRUE)
+  # dbPoolCon <- dbPool(RSQLite::SQLite(), dbname = "data/database.sqlite", create = TRUE)
+  # dbExecute(dbPoolCon, "DROP TABLE IF EXISTS comments")
+  # dbExecute(
+  #   dbPoolCon,
+  #   "CREATE TABLE IF NOT EXISTS comments (
+  #   id INTEGER PRIMARY KEY AUTOINCREMENT,
+  #   report_programming_tracker_id INTEGER NOT NULL,
+  #   comment_user_id INTEGER NOT NULL,
+  #   comment TEXT NOT NULL,
+  #   addressed INTEGER DEFAULT 0,
+  #   updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  #   FOREIGN KEY (report_programming_tracker_id) REFERENCES report_programming_tracker (id) ON DELETE CASCADE,
+  #   FOREIGN KEY (comment_user_id) REFERENCES users (id) ON DELETE CASCADE
+  # );"
+  # )
+  
+# # Function to insert "Not Assigned" and restructure the table
+#  insertNotAssignedTop <- function(dbPoolCon) {
+#    # Copy existing data into a temporary dataset
+#    temp_data <- dbGetQuery(dbPoolCon, "SELECT * FROM users;")
+#    
+#    # Ensure that the 'updated_at' column is character in temp_data
+#    if ("updated_at" %in% names(temp_data)) {
+#      temp_data$updated_at <- as.character(temp_data$updated_at)
+#    }
+#    
+#    # Create the new row with a formatted datetime string
+#    new_row <- data.frame(
+#      id = 1,
+#      username = "Not Assigned",
+#      role = "user",
+#      updated_at = format(Sys.time(), "%Y-%m-%d %H:%M:%S"),
+#      stringsAsFactors = FALSE
+#    )
+#    
+#    # Only add "Not Assigned" if it doesn't already exist
+#    if (!("Not Assigned" %in% temp_data$username)) {
+#      temp_data <- rbind(new_row, temp_data)
+#    }
+#    
+#    # Reassign sequential IDs to avoid conflicts
+#    temp_data$id <- seq_len(nrow(temp_data))
+#    
+#    # Drop the original table
+#    dbExecute(dbPoolCon, "DROP TABLE IF EXISTS users;")
+#    
+#    # Recreate the `users` table
+#    dbExecute(
+#      dbPoolCon,
+#      "CREATE TABLE users (
+#       id INTEGER PRIMARY KEY AUTOINCREMENT,
+#       username TEXT NOT NULL UNIQUE,
+#       role TEXT CHECK (role IN ('admin', 'user')),
+#       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+#     );"
+#    )
+#    
+#    # Insert data from the temporary dataset into the new table.
+#    # Note: The default behavior of dbWriteTable is to infer column types.
+#    dbWriteTable(dbPoolCon, "users", temp_data, append = TRUE, row.names = FALSE)
+#    
+#    message("Inserted 'Not Assigned' at the top (if not present) and restructured the table.")
+#  }
+#  
+#  # Call the function
+#  insertNotAssignedTop(dbPoolCon)
+ 
+# Call the function
+#insertNotAssignedTop(dbPoolCon)
+#insert into user not assigned at id 0
+
 #delete comments table
 # dbExecute(dbPoolCon, "DROP TABLE categories;")
 # dbExecute(dbPoolCon, "DROP TABLE sub_categories;")
