@@ -183,15 +183,45 @@ createTables <- function(pool) {
   dbExecute(
     pool,
     "CREATE TABLE IF NOT EXISTS comments (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    report_programming_tracker_id INTEGER NOT NULL,
+    comment_user_id INTEGER NOT NULL,
+    comment TEXT NOT NULL,
+    addressed INTEGER DEFAULT 0,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (report_programming_tracker_id) REFERENCES report_programming_tracker (id) ON DELETE CASCADE,
+    FOREIGN KEY (comment_user_id) REFERENCES users (id) ON DELETE CASCADE
+  );"
+  )
+  
+
+    # create table custom_footnotes
+  dbExecute(
+    pool,
+    "CREATE TABLE IF NOT EXISTS custom_footnotes (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       report_programming_tracker_id INTEGER NOT NULL,
-      comment_user_id INTEGER NOT NULL,
-      comment TEXT NOT NULL,
+      footnote_id  INTEGER NOT NULL,
+      sequence INTEGER NOT NULL,
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (report_programming_tracker_id) REFERENCES report_programming_tracker (id) ON DELETE CASCADE,
-      FOREIGN KEY (comment_user_id) REFERENCES users (id) ON DELETE CASCADE
+      FOREIGN KEY (footnote_id) REFERENCES footnotes (id) ON DELETE CASCADE
     );"
   )
+
+      # create table custom_populations
+  dbExecute(
+    pool,
+    "CREATE TABLE IF NOT EXISTS custom_populations (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      report_programming_tracker_id INTEGER NOT NULL,
+      population_id INTEGER NOT NULL,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (report_programming_tracker_id) REFERENCES report_programming_tracker (id) ON DELETE CASCADE,
+      FOREIGN KEY (population_id) REFERENCES populations (id) ON DELETE CASCADE
+    );"
+  )
+
   # Create indexes
   dbExecute(pool, "CREATE INDEX IF NOT EXISTS idx_report_category_id ON reports (report_category_id);")
   dbExecute(pool, "CREATE INDEX IF NOT EXISTS idx_report_sub_category_id ON reports (report_sub_category_id);")
