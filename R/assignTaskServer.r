@@ -6,191 +6,222 @@ assignTaskServer <- function(id,
 ) {
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
-    
+
+    # When the Edit button is clicked, build the modal with a rhandsontable.
     observeEvent(input$edit_button, {
       # Check that at least one row is selected.
-      if (is.null(selected_id()) || length(selected_id()) == 0) {
+      if (is.null(selected_id()) || length(selected_id()) == 0 || (length(selected_id()) == 1 && selected_id() == "0")) {
         show_toast(
           title = "Edit Report Programming Details",
           type = "info",
-          text = "Please select a row before editing.",
+          text = "Please select at least one row before editing.",
+          position = "center"
+
+        )
+        return()
+      }
+      
+      # Retrieve the tracker data and subset it to only the selected rows.
+      df <- tracker_data()
+      edit_df <- df %>% dplyr::filter(id %in% selected_id())
+      
+      if (nrow(edit_df) == 0) {
+        show_toast(
+          title = "Edit Report Programming Details",
+          type = "error",
+          text = "No data found for the selected row(s).",
           position = "center"
         )
         return()
       }
       
-      # Get tracker data and use the first selected row for default values.
-      df <- tracker_data()  # tracker_data is reactive, so call it
-      row_data <- df[selected_id()[1], ]
-      
-      # Retrieve available programmer choices from tables_data.
-      # (Assuming that both production and QC programmers come from tables_data$users())
-      prod_prog <- tables_data$users() %>% dplyr::select(id, username)
-      qc_prog   <- tables_data$users() %>% dplyr::select(id, username)
-      
-      # Create choice lists. (Note the use of the non-reactive prod_prog and qc_prog objects.)
-      prod_choices <- setNames(prod_prog$id, prod_prog$username)
-      qc_choices   <- setNames(qc_prog$id, qc_prog$username)
-      
-      # Determine default programmer IDs from the first selected row.
-      current_prod_id <- prod_prog %>% dplyr::filter(username == row_data$production_programmer) %>% dplyr::pull(id)
-      current_qc_id   <- qc_prog %>% dplyr::filter(username == row_data$qc_programmer) %>% dplyr::pull(id)
-      
-      # If multiple rows are selected, display a note in the modal.
-      multi_note <- if (length(selected_id()) > 1) {
-        tags$p(em(paste("Note:", length(selected_id()),
-                        "rows are selected. Changes will be applied to all selected rows.")))
-      } else {
-        NULL
-      }
-      
-      # Build the modal dialog.
-      edit_modal <- modalDialog(
-        title = "Edit Report Programming Details",
+      # Build the modal dialog with a styled container around the table.
+      modalContent <- modalDialog(
+        title = tagList(
+          tags$div(
+            tags$i(class = "fa fa-edit", style = "color:#337ab7; margin-right:5px;"),
+            tags$span("Edit Programming Details", style = "color:#337ab7;")
+          )
+        ),
+        size = "l",
         easyClose = TRUE,
         footer = tagList(
           actionButton(ns("save_changes"), "Save", class = "btn btn-success"),
           modalButton("Cancel")
         ),
-        fluidRow(
-          column(
-            width = 6,
-            selectInput(
-              ns("production_programmer"),
-              "Production Programmer:",
-              choices = prod_choices,
-              selected = if (length(current_prod_id) == 1) current_prod_id else prod_choices[[1]]
-            ),
-            dateInput(
-              ns("assign_date"),
-              "Assign Date:",
-              value = if (is.na(row_data$assign_date)) Sys.Date() else as.Date(row_data$assign_date, format = "%Y-%m-%d")
-            ),
-            selectInput(
-              ns("status"),
-              "Status:",
-              choices = c(
-                "Not Started",
-                "Production Started",
-                "Production Ready",
-                "Under QC",
-                "QC Failed",
-                "QC Pass"
-              ),
-              selected = if (is.na(row_data$status)) "Not Started" else row_data$status
-            )
-          ),
-          column(
-            width = 6,
-            selectInput(
-              ns("qc_programmer"),
-              "QC Programmer:",
-              choices = qc_choices,
-              selected = if (length(current_qc_id) == 1) current_qc_id else qc_choices[[1]]
-            ),
-            dateInput(
-              ns("due_date"),
-              "Due Date:",
-              value = if (is.na(row_data$due_date)) Sys.Date() + 7 else as.Date(row_data$due_date, format = "%Y-%m-%d")
-            ),
-            selectInput(
-              ns("qc_level"),
-              "Assigned Validation Level:",
-              choices = 1:3,
-              selected = if (is.na(row_data$qc_level)) 3 else as.integer(row_data$qc_level)
-            ),
-            selectInput(
-              ns("priority"),
-              "Priority (1 <- Highest, 5 <- Lowest):",
-              choices = 1:5,
-              selected = if (is.na(row_data$priority)) 1 else as.integer(row_data$priority)
-            )
-          )
-        ),
-        multi_note
+        # Wrap the table output in a styled div.
+        div(class = "rhandsontable-container", rHandsontableOutput(ns("update_table")))
       )
       
-      showModal(edit_modal)
+      showModal(modalContent)
     })
     
+    # Render the editable table.
+    output$update_table <- renderRHandsontable({
+      req(selected_id())
+      
+      # Retrieve and subset data.
+      df <- tracker_data()
+      if ("dataset_name" %in% colnames(df)) {
+        df <- df %>% dplyr::rename(report_key = dataset_name)
+      }
+      edit_df <- df %>% 
+        dplyr::filter(id %in% selected_id()) %>% 
+        dplyr::select(id, report_key,
+                      production_programmer, assign_date,
+                      qc_programmer, due_date, qc_level,
+                      priority, status) %>%
+        dplyr::mutate(
+          status = ifelse(is.na(status), "Not Started", status),
+          priority = ifelse(is.na(priority), 1, priority),
+          qc_level = ifelse(is.na(qc_level), 3, qc_level),
+          assign_date = ifelse(is.na(assign_date), as.character(Sys.Date()), assign_date),
+          due_date = ifelse(is.na(due_date), as.character(as.Date(assign_date) + 7), due_date)
+
+        ) %>%
+        dplyr::rename(
+          "Production Programmer" = production_programmer,
+          "Assign Date" = assign_date,
+          "QC Programmer" = qc_programmer,
+          "Due Date" = due_date,
+          "QC Level" = qc_level,
+          "Priority" = priority,  
+          "Status" = status,
+          "Report Key" = report_key
+        )
+      
+      # Create the table with specified dimensions.
+      rhot <- rhandsontable::rhandsontable(edit_df, 
+                                           rowHeaders = FALSE, 
+                                           stretchH = "all", 
+                                           width = "100%", 
+                                           height = 400,
+                                           overflow = "visible")
+      
+      # Retrieve options for dropdowns.
+      prod_prog <- tables_data$users() %>% dplyr::select(id, username)
+      qc_prog   <- tables_data$users() %>% dplyr::select(id, username)
+      prod_options <- prod_prog$username  
+      qc_options   <- qc_prog$username
+      status_options <- c("Not Started", "Production Started", "Production Ready", "Under QC", "QC Failed", "QC Pass")
+      qc_level_options <- as.character(1:3)
+      priority_options <- as.character(1:5)
+      
+      # Set up dropdowns and date editors.
+      rhot <- rhandsontable::hot_col(rhot, "Production Programmer", type = "dropdown", source = prod_options, strict = TRUE, allowInvalid = FALSE)
+      rhot <- rhandsontable::hot_col(rhot, "QC Programmer", type = "dropdown", source = qc_options, strict = TRUE, allowInvalid = FALSE)
+      rhot <- rhandsontable::hot_col(rhot, "Status", type = "dropdown", source = status_options, strict = TRUE, allowInvalid = FALSE)
+      rhot <- rhandsontable::hot_col(rhot, "QC Level", type = "dropdown", source = qc_level_options, strict = TRUE, allowInvalid = FALSE)
+      rhot <- rhandsontable::hot_col(rhot, "Priority", type = "dropdown", source = priority_options, strict = TRUE, allowInvalid = FALSE)
+      rhot <- rhandsontable::hot_col(rhot, "Assign Date", type = "date", dateFormat = "YYYY-MM-DD")
+      rhot <- rhandsontable::hot_col(rhot, "Due Date", type = "date", dateFormat = "YYYY-MM-DD")
+      
+      # Set read-only columns.
+      rhot <- rhandsontable::hot_col(rhot, "Report Key", readOnly = TRUE)
+      rhot <- rhandsontable::hot_col(rhot, "id", colWidth = 0, readOnly = TRUE)
+      
+      return(rhot)
+    })
+    
+    # Process the edited table when Save is clicked.
     observeEvent(input$save_changes, {
-      # Retrieve input values.
-      prod_id     <- input$production_programmer
-      qc_id       <- input$qc_programmer
-      assign_date <- input$assign_date
-      due_date    <- input$due_date
-      priority    <- input$priority
-      status      <- input$status
-      qc_level    <- input$qc_level
-      
-      # Validate that production and QC programmer are not the same.
-      if (prod_id == qc_id) {
-        show_toast(
-          title = "Edit Report Programming Details",
-          type = "error",
-          text = "Production and QC programmer cannot be the same person.",
-          position = "center"
-        )
-        return()
-      }
-      
-      # Validate that the due date is after the assign date.
-      if (as.Date(due_date) <= as.Date(assign_date)) {
-        show_toast(
-          title = "Edit Report Programming Details",
-          type = "error",
-          text = "Due date must be after the assign date.",
-          position = "center"
-        )
-        return()
-      }
-      
-      # Attempt the update for each selected report.
-      tryCatch({
-        poolWithTransaction(pool, function(conn) {
-          for (report_id in selected_id()) {
-            DBI::dbExecute(
-              conn,
-              "UPDATE report_programming_tracker
-               SET production_programmer_id = ?,
-                   assign_date = ?,
-                   qc_programmer_id = ?,
-                   due_date = ?,
-                   priority = ?,
-                   status = ?,
-                   qc_level = ?,
-                   updated_at = CURRENT_TIMESTAMP
-               WHERE id = ? ;",
-              params = list(
-                prod_id,
-                as.character(assign_date),
-                qc_id,
-                as.character(due_date),
-                as.integer(priority),
-                status,
-                as.integer(qc_level),
-                report_id
-              )
-            )
-          }
-        })
+      if (!is.null(input$update_table)) {
+        # Convert the edited table into a data frame.
+        edited_df <- rhandsontable::hot_to_r(input$update_table) %>%
+          dplyr::rename(
+            "production_programmer" = `Production Programmer`,
+            "qc_programmer" = `QC Programmer`,
+            "status" = `Status`,
+            "qc_level" = `QC Level`,
+            "priority" = `Priority`,
+            "assign_date" = `Assign Date`,
+            "due_date" = `Due Date`,
+            "report_key" = `Report Key`
+          )
         
-        show_toast(
-          title = "Edit Report Programming Details",
-          type = "success",
-          text = "Record(s) updated successfully.",
-          position = "center"
-        )
-        removeModal()
-      }, error = function(e) {
-        show_toast(
-          title = "Edit Report Programming Details",
-          type = "error",
-          text = paste("Error updating record:", e$message),
-          position = "center"
-        )
-      })
+        # Retrieve programmer info to convert names to IDs.
+        prod_users <- tables_data$users() %>% dplyr::select(id, username)
+        qc_users <- tables_data$users() %>% dplyr::select(id, username)
+        
+        # Validate each row.
+        for (i in seq_len(nrow(edited_df))) {
+          row <- edited_df[i, ]
+          if (!is.na(row$production_programmer) && !is.na(row$qc_programmer) && row$production_programmer == row$qc_programmer) {
+            show_toast(
+              title = "Edit Report Programming Details",
+              type = "error",
+              text = paste("Row", i, ": Production and QC programmer cannot be the same person."),
+              position = "center"
+            )
+            return()
+          }
+          assign_date_val <- as.Date(row$assign_date)
+          due_date_val <- as.Date(row$due_date)
+          if (!is.na(assign_date_val) && !is.na(due_date_val) && due_date_val <= assign_date_val) {
+            show_toast(
+              title = "Edit Report Programming Details",
+              type = "error",
+              text = paste("Row", i, ": Due date must be after the assign date."),
+              position = "center"
+            )
+            return()
+          }
+        }
+        
+        # Attempt the update.
+        tryCatch({
+          poolWithTransaction(pool, function(conn) {
+            for (i in seq_len(nrow(edited_df))) {
+              row <- edited_df[i, ]
+              prod_id <- prod_users %>% dplyr::filter(username == row$production_programmer) %>% dplyr::pull(id)
+              qc_id   <- qc_users %>% dplyr::filter(username == row$qc_programmer) %>% dplyr::pull(id)
+              
+              if (length(prod_id) == 0 || length(qc_id) == 0) {
+                stop("Invalid programmer selection in row ", i)
+              }
+              
+              DBI::dbExecute(
+                conn,
+                "UPDATE report_programming_tracker
+                 SET production_programmer_id = ?,
+                     assign_date = ?,
+                     qc_programmer_id = ?,
+                     due_date = ?,
+                     priority = ?,
+                     status = ?,
+                     qc_level = ?,
+                     updated_at = CURRENT_TIMESTAMP
+                 WHERE id = ? ;",
+                params = list(
+                  prod_id,
+                  as.character(row$assign_date),
+                  qc_id,
+                  as.character(row$due_date),
+                  as.integer(row$priority),
+                  row$status,
+                  as.integer(row$qc_level),
+                  row$id
+                )
+              )
+            }
+          })
+          
+          show_toast(
+            title = "Edit Report Programming Details",
+            type = "success",
+            text = "Record(s) updated successfully.",
+            position = "center"
+          )
+          removeModal()
+        }, error = function(e) {
+          show_toast(
+            title = "Edit Report Programming Details",
+            type = "error",
+            text = paste("Error updating record:", e$message),
+            position = "center"
+          )
+        })
+      }
     })
-    
   })
 }
