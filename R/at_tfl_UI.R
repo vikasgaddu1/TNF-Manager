@@ -1,37 +1,78 @@
 at_tfl_UI <- function(id) {
   ns <- NS(id)
-  wellPanel(
+
+  tagList(
     fluidRow(
-      column(width = 3, uiOutput(ns("report_type_select"))),
-      column(width = 3, uiOutput(ns("category_select"))),
-      column(width = 3, uiOutput(ns("subcategory_select")))
+      column(
+        width = 12,
+        fluidRow(
+          column(
+            width = 3,
+            wellPanel(
+              div(
+                style = "text-align: center;",
+                span(HTML("Choose Specific Tasks: <br>"), style = "color: black; font-weight: bold; margin-right: 10px;"),
+                actionButton(
+                  ns("select_highlighted"),
+                  "Select Highlighted",
+                  class = "btn btn-success btn-sm me-2"
+                ),
+                actionButton(
+                  ns("deselect_highlighted"),
+                  "Deselect Highlighted",
+                  class = "btn btn-danger btn-sm me-2"
+                )
+              )
+            )
+          ),
+          column(
+            width = 3,
+            wellPanel(
+              div(
+                style = "text-align: center;",
+                span(HTML("Choose Filtered Task: <br>"), style = "color: black; font-weight: bold; margin-right: 10px;"),
+                actionButton(
+                  ns("select_all_visible"),
+                  "Select all Visible",
+                  class = "btn btn-success btn-sm me-2"
+                ),
+                actionButton(
+                  ns("deselect_all_visible"),
+                  "Deselect all Visible",
+                  class = "btn btn-danger btn-sm me-2"
+                )
+              )
+            )
+          ),
+          column(
+            width = 3,
+            wellPanel(
+              div(
+                style = "text-align: center;",
+                at_CopyUI(ns("copy_reporting_effort"))
+              )
+            )
+          ),
+          column(
+            width = 3,
+            wellPanel(
+              downloadButton(
+                ns("download_tnf"), 
+                label = "Download TOC", 
+                class = "btn btn-primary btn-sm me-2"
+              )
+            )
+          )
+        )
+      )
     ),
-    # Search box
-    fluidRow(column(
-      width = 3,
-      textInput(
-        ns("search"),
-        label = "Free Text Search",
-        placeholder = "Enter keywords to filter...",
-        width = "100%"
+    fluidRow(
+      column(
+        width = 12,
+        wellPanel(
+          div(class = "table-container", DTOutput(ns("reports_table")))
+        )
       )
-    )),
-    # Save button
-    fluidRow(column(
-      width = 3,
-      div(
-        class = "d-flex justify-content-start",
-        actionButton(
-          ns("save_selection"),
-          "Save Selection",
-          class = "btn btn-success btn-sm me-2",
-          icon = icon("save")
-        ),
-        downloadButton(ns("download_tnf"), label = "Download TNF as Excel", class = "btn btn-primary btn-sm me-2")
-      )
-    )),
-    tags$hr(),
-    # Table output
-    div(class = "table-container", rHandsontableOutput(ns("reports_table")))
+    )
   )
 }
