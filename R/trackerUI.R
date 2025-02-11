@@ -6,17 +6,12 @@ trackerUI <- function(id) {
     ),
     fluidRow(
       column(
-        width = 4,
+        width = 6,
         wellPanel(
           class = "p-3",
           div(
             class = "d-flex justify-content-start",
-            actionButton(
-              ns("edit_button"),
-              "Edit Selected Row",
-              class = "btn btn-warning btn-sm",
-              icon = icon("edit")
-            ),
+            assignTaskUI(ns("assign_task")),
             commentsUI(ns("comments")),
             downloadButton(
               ns("download_tracker"),
@@ -46,8 +41,8 @@ trackerUI <- function(id) {
     fluidRow(
       column(
         width = 12,
-        div(
-          class = "table-responsive", # Wrapper for responsive table
+        wellPanel(
+          class = "p-3",
           DT::DTOutput(ns("tracker_table"))
         )
       )
