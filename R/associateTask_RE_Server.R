@@ -8,7 +8,7 @@ associateTask_RE_Server <- function(id, pool, tables_data) {
         dplyr::mutate(label = paste(study, database_release, reporting_effort, sep = "_")) %>%
         dplyr::select(id, label)
     })
-      
+
     # Load Reporting Efforts into dropdown
     observe({
       req(reporting_efforts())
