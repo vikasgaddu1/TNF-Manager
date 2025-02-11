@@ -25,9 +25,6 @@ library(jsonlite)
 library(reactlog)
 library(lubridate)
 
-  # Enable Reactlog
-  options(shiny.reactlog = FALSE)
-  reactlog_enable()
 # Create a pool of connections to the database using RSQLite
 dbPoolCon <- dbPool(RSQLite::SQLite(), dbname = "data/database.sqlite", create = TRUE)
 # Get list of tables in the database
@@ -38,7 +35,7 @@ createTables(dbPoolCon)
 
 
 ui <- dashboardPage(
-  dashboardHeader(title = "Geron App v0.4",  
+  dashboardHeader(title = "PT v0.4",  
 
         tags$li(
           class = "dropdown",
@@ -69,12 +66,19 @@ ui <- dashboardPage(
         icon = icon("tasks")
       ),
       menuItem(
+        "Search",
+        tabName = "search",
+        icon = icon("search")
+      ),  
+      menuItem(
         "FAQ",
         tabName = "faq",
         icon = icon("question")
       )
+
       # Add more menu items for other tables
-    )
+    ),
+    collapsed = TRUE
   ),
   dashboardBody( 
     shinyFeedback::useShinyFeedback(), 
@@ -107,6 +111,7 @@ ui <- dashboardPage(
         associateTask_RE_UI("re_reports", "Associate Task to Reporting Effort")
       ),
       tabItem("tracker", programmingTrackerUI("tracker")),
+      tabItem("search", searchUI("search")),
       tabItem("faq", FAQModuleUI("faq"))
       # Add more tabItems for other tables
     )
@@ -136,15 +141,18 @@ server <- function(input, output, session) {
   reportingEffortsServer("reporting_effort", dbPoolCon, tables_data = tables_data)
   usersServer("users", dbPoolCon, tables_data = tables_data)
   associateTask_RE_Server("re_reports", dbPoolCon, tables_data = tables_data)
-  programmingTrackerServer("tracker", dbPoolCon, tables_data = tables_data)
+  search_data <- programmingTrackerServer("tracker", dbPoolCon, tables_data = tables_data)
   tracker_data <- tableSelectorServer("tableSelector", tables_data = tables_data, table_names = tables)
   taskSummaryServer("taskSummary", tracker_data, reactive(input$user_select))
-
+  searchServer("search", search_data[[1]], search_data[[2]], search_data[[3]])
+  userchoices <- reactive({
+    tables_data$users() %>% dplyr::filter(id != 1) %>% dplyr::pull(username) %>% unique()
+  })
   observe({
     updateSelectizeInput(
       session,
       "user_select",
-      choices = unique(tables_data$users()$username)
+      choices = userchoices()
     )
   })
   # Disconnect pool when session ends
