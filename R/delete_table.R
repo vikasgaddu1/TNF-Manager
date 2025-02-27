@@ -1,5 +1,5 @@
   # dbPoolCon <- dbPool(RSQLite::SQLite(), dbname = "data/database.sqlite", create = TRUE)
-  # dbExecute(dbPoolCon, "DROP TABLE IF EXISTS comments")
+  # dbExecute(dbPoolCon, "DROP TABLE IF EXISTS milestones")
   # dbExecute(
   #   dbPoolCon,
   #   "CREATE TABLE IF NOT EXISTS comments (

@@ -66,6 +66,16 @@ ui <- dashboardPage(
         icon = icon("tasks")
       ),
       menuItem(
+        "Project Timeline",
+        tabName = "milestone",
+        icon = icon("calendar-days")
+      ),
+      menuItem(
+        "Decision Log",
+        tabName = "decision_log",
+        icon = icon("book")
+      ),
+      menuItem(
         "Search",
         tabName = "search",
         icon = icon("search")
@@ -102,6 +112,7 @@ ui <- dashboardPage(
             tabPanel("Datasets", icon = icon("database"), genericCRUDUI("datasets", "Datasets")),
             tabPanel("Reports", icon = icon("file-lines"), genericCRUDUI("reports", "Reports")),
             tabPanel("Reporting Effort", icon = icon("chart-line"), genericCRUDUI("reporting_effort", "Reporting Effort")),
+            tabPanel("Upload", icon = icon("upload"), uploadUI("upload")),
             tabPanel("View DB", icon = icon("table"), tableSelectorUI("tableSelector"))
           )
         )
@@ -111,6 +122,8 @@ ui <- dashboardPage(
         associateTask_RE_UI("re_reports", "Associate Task to Reporting Effort")
       ),
       tabItem("tracker", programmingTrackerUI("tracker")),
+      tabItem("milestone", milestoneUI("milestone")),
+      tabItem("decision_log", decisionLogUI("decision_log")),
       tabItem("search", searchUI("search")),
       tabItem("faq", FAQModuleUI("faq"))
       # Add more tabItems for other tables
@@ -141,10 +154,13 @@ server <- function(input, output, session) {
   reportingEffortsServer("reporting_effort", dbPoolCon, tables_data = tables_data)
   usersServer("users", dbPoolCon, tables_data = tables_data)
   associateTask_RE_Server("re_reports", dbPoolCon, tables_data = tables_data)
+  uploadServer("upload", upload_directory = "data/excel_import")
   search_data <- programmingTrackerServer("tracker", dbPoolCon, tables_data = tables_data)
   tracker_data <- tableSelectorServer("tableSelector", tables_data = tables_data, table_names = tables)
   taskSummaryServer("taskSummary", tracker_data, reactive(input$user_select))
   searchServer("search", search_data[[1]], search_data[[2]], search_data[[3]])
+  milestoneServer("milestone", dbPoolCon,tables_data = tables_data)
+  decisionLogServer("decision_log", dbPoolCon, tables_data = tables_data)
   userchoices <- reactive({
     tables_data$users() %>% dplyr::filter(id != 1) %>% dplyr::pull(username) %>% unique()
   })

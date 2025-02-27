@@ -222,6 +222,40 @@ createTables <- function(pool) {
     );"
   )
 
+  dbExecute(
+    pool,
+    "CREATE TABLE IF NOT EXISTS milestones (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      Date TEXT,
+      Milestone TEXT,
+      Assigned_To TEXT,
+      reporting_effort_id INTEGER NOT NULL,
+      Position INTEGER,
+      Status TEXT,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  )"
+  )
+
+  dbExecute(
+    pool,
+    "CREATE TABLE IF NOT EXISTS decision_logs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      reporting_effort_id INTEGER NOT NULL,
+      category TEXT NOT NULL,
+      question TEXT NOT NULL,
+      answer_rationale TEXT NOT NULL,
+      status TEXT NOT NULL,
+      confidence TEXT NOT NULL,
+      owners TEXT NOT NULL,
+      comments TEXT,
+      downstream_impact TEXT,
+      date_resolved DATE,
+      links TEXT,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (reporting_effort_id) REFERENCES reporting_efforts (id) ON DELETE CASCADE
+    )"
+  )
+
   # Create indexes
   dbExecute(pool, "CREATE INDEX IF NOT EXISTS idx_report_category_id ON reports (report_category_id);")
   dbExecute(pool, "CREATE INDEX IF NOT EXISTS idx_report_sub_category_id ON reports (report_sub_category_id);")

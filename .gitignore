@@ -4,7 +4,10 @@
 .Ruserdata
 .xlsx
 .xls
+.sqlite
 
 # Ignore excel_export folder in data
 data/excel_export/
 R/archive/
+R/codebase.zip
+data/
