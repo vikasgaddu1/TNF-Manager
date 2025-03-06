@@ -185,33 +185,18 @@ reportCRUDServer <- function(id, pool, tables_data) {
             ns("titles"),
             "Select Titles",
             choices = tables_data$titles()$title_text,
-            multiple = TRUE,
-            options = list(
-              create = TRUE,
-              createOnBlur = TRUE,
-              placeholder = "Select or type new titles"
-            )
+            multiple = TRUE
           ),
           selectizeInput(
             ns("footnotes"),
             "Select Footnotes",
             choices = tables_data$footnotes()$footnote_text,
-            multiple = TRUE,
-            options = list(
-              create = TRUE,
-              createOnBlur = TRUE,
-              placeholder = "Select or type new footnotes"
-            )
+            multiple = TRUE
           ),
           selectizeInput(
             ns("populations"),
             "Select Population",
-            choices = tables_data$populations()$population_text,
-            options = list(
-              create = TRUE,
-              createOnBlur = TRUE,
-              placeholder = "Select or type new population"
-            )
+            choices = tables_data$populations()$population_text
           )
         ),
         footer = div(
