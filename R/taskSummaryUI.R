@@ -1,4 +1,13 @@
 taskSummaryUI <- function(id) {
   ns <- NS(id)
-  dropdownMenuOutput(ns("messageMenu"))
+  box(
+    title = tagList(
+      "Outstanding Tasks - ",
+      textOutput(ns("userTitle"), inline = TRUE)
+    ),
+    status = "primary",
+    solidHeader = TRUE,
+    width = 12,
+    htmlOutput(ns("taskSummaryContent"))
+  )
 }

@@ -141,8 +141,8 @@ programmingEffortServer <- function(id, tracker_data, hidden_cols, col_names) {
       data() %>%
         select(production_programmer, qc_programmer) %>%
         mutate(
-          production_programmer = ifelse(is.na(production_programmer), "Unassigned", production_programmer),
-          qc_programmer = ifelse(is.na(qc_programmer), "Unassigned", qc_programmer)
+          production_programmer = ifelse(is.na(production_programmer), "Not Assigned", production_programmer),
+          qc_programmer = ifelse(is.na(qc_programmer), "Not Assigned", qc_programmer)
         ) %>%
         pivot_longer(
           cols = c(production_programmer, qc_programmer),
@@ -154,7 +154,7 @@ programmingEffortServer <- function(id, tracker_data, hidden_cols, col_names) {
             role == "production_programmer" ~ "Production",
             role == "qc_programmer" ~ "QC"
           ),
-          Programmer = factor(Programmer, levels = c(setdiff(unique(Programmer), "Unassigned"), "Unassigned"))
+          Programmer = factor(Programmer, levels = c(setdiff(unique(Programmer), "Not Assigned"), "Not Assigned"))
         ) %>%
         select(role, Programmer) 
     })

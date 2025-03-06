@@ -1,8 +1,45 @@
 searchServer <- function(id, tfl_tracker_data, sdtm_tracker_data, adam_tracker_data) {
   moduleServer(id, function(input, output, session) {
+    # Define column name mappings
+    colnames_mapping <- c(
+      "study" = "Study",
+      "database_release" = "Database Release",
+      "reporting_effort" = "Reporting Effort",
+      "category_name" = "Category",
+      "sub_category_name" = "Sub-Category",
+      "report_key" = "Report Key",
+      "report_type" = "Report Type",
+      "report_ich_number" = "ICH Number",
+      "title_key" = "Title Key",
+      "titles" = "Titles",
+      "footnotes" = "Footnotes",
+      "population_text" = "Population",
+      "production_programmer" = "Production Programmer",
+      "qc_programmer" = "QC Programmer",
+      "status" = "Status",
+      "priority" = "Priority",
+      "assign_date" = "Assign Date",
+      "due_date" = "Due Date",
+      "qc_level" = "QC Level",
+      "suggested_ich_number" = "Suggested ICH Number",
+      "dataset_name" = "Dataset Name",
+      "dataset_label" = "Dataset Label",
+      "dataset_type" = "Dataset Type",
+      "category" = "Category",
+      "comments" = "Comments"
+    )
+    
     output$tfl_tracker <- DT::renderDT({
+      data <- tfl_tracker_data() %>% 
+        dplyr::select(-contains("id"))
+      
+      # Rename columns using the mapping
+      colnames(data) <- sapply(colnames(data), function(x) {
+        ifelse(x %in% names(colnames_mapping), colnames_mapping[x], x)
+      })
+      
       datatable(
-        tfl_tracker_data() %>% dplyr::select(-contains("id")),
+        data,
         rownames = FALSE,
         selection = "none",
         filter = "top",   # Enables column-wise filtering
@@ -22,12 +59,20 @@ searchServer <- function(id, tfl_tracker_data, sdtm_tracker_data, adam_tracker_d
           search = list(regex = TRUE)  # Enable regex search
         )
       )
-      })
+    })
 
     output$sdtm_tracker <- DT::renderDT({
+      data <- sdtm_tracker_data() %>% 
+        dplyr::select(-contains("id"))
+      
+      # Rename columns using the mapping
+      colnames(data) <- sapply(colnames(data), function(x) {
+        ifelse(x %in% names(colnames_mapping), colnames_mapping[x], x)
+      })
+      
       datatable(
-        sdtm_tracker_data() %>% dplyr::select(-contains("id")),
-         rownames = FALSE,
+        data,
+        rownames = FALSE,
         selection = "none",
         filter = "top",   # Enables column-wise filtering
         class = "display compact",
@@ -46,12 +91,20 @@ searchServer <- function(id, tfl_tracker_data, sdtm_tracker_data, adam_tracker_d
           search = list(regex = TRUE)  # Enable regex search
         )
       )
-      })
+    })
 
     output$adam_tracker <- DT::renderDT({
+      data <- adam_tracker_data() %>% 
+        dplyr::select(-contains("id"))
+      
+      # Rename columns using the mapping
+      colnames(data) <- sapply(colnames(data), function(x) {
+        ifelse(x %in% names(colnames_mapping), colnames_mapping[x], x)
+      })
+      
       datatable(
-        adam_tracker_data() %>% dplyr::select(-contains("id")),
-         rownames = FALSE,
+        data,
+        rownames = FALSE,
         selection = "none",
         filter = "top",   # Enables column-wise filtering
         class = "display compact",

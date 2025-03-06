@@ -17,8 +17,8 @@ usersServer <- function(id, pool, tables_data) {
           selectInput(
             ns("role_input"),
             "Role",
-            choices = c("admin", "user"),
-            selected = "user"
+            choices = c("Admin", "Editor"),
+            selected = "Editor"
           )
         ),
         footer = div(
@@ -86,7 +86,7 @@ usersServer <- function(id, pool, tables_data) {
           selectInput(
             ns("role_input"),
             "Role",
-            choices = c("admin", "user"),
+            choices = c("Admin", "Editor"),
             selected = record$role
           )
         ),

@@ -151,7 +151,7 @@ createTables <- function(pool) {
     "CREATE TABLE IF NOT EXISTS users (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       username TEXT NOT NULL UNIQUE,
-      role TEXT CHECK (role IN ('admin', 'user')),
+      role TEXT CHECK (role IN ('Admin', 'Editor')),
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP   
     );"
   )

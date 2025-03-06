@@ -1,3 +1,25 @@
+  # Function to get current user
+  get_current_user <- function(session) {
+    if (is.null(session$user)) {
+      return("vgaddu")
+    }
+    return(session$user)
+  }
+
+  # Function to get current user's role
+  get_current_user_role <- function(pool,session) {
+    current_user <- get_current_user(session)
+    
+    # Get user role from users table
+    user_role <- dbGetQuery(
+      pool,
+      "SELECT role FROM users WHERE username = ?",
+      params = list(current_user)
+    )$role
+    
+    return(user_role)
+  }
+
 # This function will take a vector with names of libraries and check if
 # they are installed. If not, it will install them and load them
 load_libraries <- function(libs) {

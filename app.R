@@ -35,30 +35,21 @@ createTables(dbPoolCon)
 
 
 ui <- dashboardPage(
-  dashboardHeader(title = "PT v0.4",  
-
-        tags$li(
-          class = "dropdown",
-          taskSummaryUI("taskSummary")
-        ),
-        tags$li(
-          class = "dropdown margin-top-10",
-          selectizeInput(
-            "user_select",
-            label = NULL,
-            choices = NULL,
-            width = "200px"
-          )
-        )
-      ),
+  dashboardHeader(title = tags$img(src = "image/small_logo.png", height = "50px", style = "margin: -15px 0;"),
+    tags$li(
+      class = "dropdown",
+      textOutput("headerWelcomeMessage")
+    )
+  ),
   dashboardSidebar(
     sidebarMenu(
       id = "tabs",
-      menuItem("CRUD Menu", tabName = "crud_menu", icon = icon("th"), badgeLabel = "Admin", badgeColor = "red"),
+      menuItem("Home", tabName = "home", icon = icon("home")),
+      menuItem("Data Management", tabName = "crud_menu", icon = icon("th"), badgeLabel = "Admin", badgeColor = "red"),
       menuItem(
         "Associate Task to RE",
         tabName = "re_reports",
-        icon = icon("code")
+        icon = icon("link")
       ),
       menuItem(
         "Programming Tracker",
@@ -94,9 +85,15 @@ ui <- dashboardPage(
     shinyFeedback::useShinyFeedback(), 
     tags$head(
       # Add the favicon here
-      tags$link(rel = "icon", type = "image/x-icon", href = "image/favicon.ico")
+      tags$link(rel = "icon", type = "image/x-icon", href = "image/favicon.ico"),
+      # Add custom CSS
+      tags$link(rel = "stylesheet", type = "text/css", href = "custom.css")
     ),
     tabItems(
+      tabItem(
+        tabName = "home",
+        landingPageUI("landing")
+      ),
       tabItem(
         tabName = "crud_menu",
         fluidRow(
@@ -129,11 +126,46 @@ ui <- dashboardPage(
       # Add more tabItems for other tables
     )
   ),
-  freshTheme = TRUE,
   skin = "black-light"
 )
 
 server <- function(input, output, session) {
+
+  # Function to get current user
+  get_current_user <- function(session) {
+    if (is.null(session$user)) {
+      return("vgaddu")
+    }
+    return(session$user)
+  }
+
+  # Function to get current user's role
+  get_current_user_role <- function(session) {
+    current_user <- get_current_user(session)
+    
+    # Get user role from users table
+    user_role <- dbGetQuery(
+      dbPoolCon,
+      "SELECT role FROM users WHERE username = ?",
+      params = list(current_user)
+    )$role
+    
+    return(user_role)
+  }
+
+  # Reactive expressions for current user and role
+  current_user <- reactive({
+    get_current_user(session)
+  })
+
+  current_user_role <- reactive({
+    get_current_user_role(session)
+  })
+
+  # Header welcome message
+  output$headerWelcomeMessage <- renderText({
+    paste0("Welcome, ", current_user(), " (", current_user_role(), ")")
+  })
 
   tracker_data <- reactiveVal()
   tables <- dbListTables(dbPoolCon)
@@ -142,7 +174,8 @@ server <- function(input, output, session) {
   # Initialize the reactive tables data
   tables_data <- pollAllTables(dbPoolCon, tables)
   
- 
+
+  
   # Use reactive values in modules
   singleColumnCRUDServer("categories", dbPoolCon, "categories", "category_name", tables_data = tables_data)
   subCategoriesCRUDServer("sub_categories", dbPoolCon, tabs_input = reactive(input$crud_tabs), tables_data = tables_data)
@@ -157,20 +190,18 @@ server <- function(input, output, session) {
   uploadServer("upload", upload_directory = "data/excel_import")
   search_data <- programmingTrackerServer("tracker", dbPoolCon, tables_data = tables_data)
   tracker_data <- tableSelectorServer("tableSelector", tables_data = tables_data, table_names = tables)
-  taskSummaryServer("taskSummary", tracker_data, reactive(input$user_select))
+    # Landing page
+  landingPageServer("landing", dbPoolCon, tracker_data,tables_data, session)
+  taskSummaryServer("taskSummary", tracker_data, current_user)
   searchServer("search", search_data[[1]], search_data[[2]], search_data[[3]])
-  milestoneServer("milestone", dbPoolCon,tables_data = tables_data)
+  milestoneServer("milestone", dbPoolCon, tables_data = tables_data)
   decisionLogServer("decision_log", dbPoolCon, tables_data = tables_data)
-  userchoices <- reactive({
-    tables_data$users() %>% dplyr::filter(id != 1) %>% dplyr::pull(username) %>% unique()
-  })
+  
+  # Set the initial tab to Home
   observe({
-    updateSelectizeInput(
-      session,
-      "user_select",
-      choices = userchoices()
-    )
+    updateTabItems(session, "tabs", "home")
   })
+  
   # Disconnect pool when session ends
   onStop(function() {
     poolClose(dbPoolCon)

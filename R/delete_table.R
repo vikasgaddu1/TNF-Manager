@@ -1,4 +1,34 @@
-  # dbPoolCon <- dbPool(RSQLite::SQLite(), dbname = "data/database.sqlite", create = TRUE)
+# dbPoolCon <- dbPool(RSQLite::SQLite(), dbname = "data/database.sqlite", create = TRUE)
+# dbExecute(dbPoolCon, "DROP TABLE IF EXISTS users_new")
+# # Create a new table without constraints
+# dbExecute(dbPoolCon, "
+#   CREATE TABLE users_new (
+#     id INTEGER PRIMARY KEY AUTOINCREMENT,
+#     username TEXT NOT NULL UNIQUE,
+#     role TEXT CHECK(role IN ('Admin', 'Editor')),
+#     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+#   );
+# ")
+# 
+# # Copy data from the old table to the new table, transforming the roles
+# dbExecute(dbPoolCon, "
+#   INSERT INTO users_new (id, username, role, updated_at)
+#   SELECT 
+#     id, 
+#     username, 
+#     CASE 
+#       WHEN role = 'admin' THEN 'Admin' 
+#       WHEN role = 'user' THEN 'Editor'
+#       ELSE role 
+#     END, 
+#     updated_at 
+#   FROM users;
+# ")
+# 
+# # Drop the old table and rename the new one
+# dbExecute(dbPoolCon, "DROP TABLE users;")
+# dbExecute(dbPoolCon, "ALTER TABLE users_new RENAME TO users;")
+
   # dbExecute(dbPoolCon, "DROP TABLE IF EXISTS milestones")
   # dbExecute(
   #   dbPoolCon,

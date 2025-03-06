@@ -1,5 +1,4 @@
-
-# Server module with added “addressed” checkbox functionality.
+# Server module with added "addressed" checkbox functionality.
 commentsServer <- function(id, pool, tables_data, selected_id) { 
   moduleServer(id, function(input, output, session) {
     ns <- session$ns
@@ -20,7 +19,7 @@ commentsServer <- function(id, pool, tables_data, selected_id) {
       
       ## Prepare the data
       
-      # It’s best to rename the primary key from the comments table so that we can keep
+      # It's best to rename the primary key from the comments table so that we can keep
       # both the tracker id and the comment id.
       comments_tbl <- tables_data$comments() %>% 
         dplyr::rename(
@@ -29,7 +28,7 @@ commentsServer <- function(id, pool, tables_data, selected_id) {
         )
       
       # Build a reactive that joins tracker data, comments, and user info.
-      # We now also select the “addressed” field.
+      # We now also select the "addressed" field.
       comment_data <- reactive({
         tables_data$report_programming_tracker() %>%
           dplyr::left_join(
@@ -49,14 +48,6 @@ commentsServer <- function(id, pool, tables_data, selected_id) {
             comment,
             addressed
           )
-      })
-      
-      # Fetch users for the dropdown menu.
-      users <- reactive({
-        tables_data$users() %>% dplyr::select(id, username)
-      })
-      user_choices <- reactive({
-        setNames(users()$id, users()$username)
       })
       
       # If more than one row is selected, show a note in the modal.
@@ -82,12 +73,6 @@ commentsServer <- function(id, pool, tables_data, selected_id) {
               width = "100%",
               height = "100px",
               resize = "vertical"
-            ),
-            selectInput(
-              ns("user"),
-              "User",
-              choices = user_choices(),
-              selected = NULL
             )
           ),
           easyClose = TRUE,
@@ -127,7 +112,7 @@ commentsServer <- function(id, pool, tables_data, selected_id) {
                      ))
               ),
               column(2,
-                     # Each checkbox’s id is constructed from the comment_id.
+                     # Each checkbox's id is constructed from the comment_id.
                      checkboxInput(ns(paste0("addressed_", row$comment_id)),
                                    "Addressed",
                                    value = as.logical(row$addressed))
@@ -149,12 +134,19 @@ commentsServer <- function(id, pool, tables_data, selected_id) {
       
       tryCatch({
         poolWithTransaction(pool, function(conn) {
+          # Get the current user's ID from the users table
+          user_id <- dbGetQuery(
+            conn,
+            "SELECT id FROM users WHERE username = ?",
+            params = list(get_current_user(session))
+          )$id[1]
+          
           for (report_id in selected_id()) {
             dbExecute(
               conn,
               "INSERT INTO comments (report_programming_tracker_id, comment_user_id, comment, updated_at)
                VALUES (?, ?, ?, CURRENT_TIMESTAMP)",
-              params = list(report_id, input$user, input$new_comment)
+              params = list(report_id, user_id, input$new_comment)
             )
           }
         })
@@ -177,7 +169,7 @@ commentsServer <- function(id, pool, tables_data, selected_id) {
     })
     
     
-    #### Observer for Updating the “Addressed” Status
+    #### Observer for Updating the "Addressed" Status
     observeEvent(input$update_addressed, {
       req(selected_id())
       

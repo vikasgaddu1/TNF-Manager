@@ -108,7 +108,8 @@ datasetTrackerServer <- function(id, pool, reporting_effort, ds_type, tables_dat
         choices = col_names,
         selected = c(
           "id",
-          "report_type"
+          "report_type",
+          "report_id"
         ) # Default hidden column
       )
     })

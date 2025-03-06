@@ -3,7 +3,14 @@ programmingEffortUI <- function(id) {
   
   fluidRow(
     box(
-      title = "Programming Effort Progress Details",
+      title = tagList(
+        icon("chart-line"), 
+        "Programming Effort Progress Details",
+        tags$small(
+          style = "display: block; font-size: 80%; color: #fff; font-style: italic;",
+          "Click +/- sign on right to expand/collapse"
+        )
+      ),
       status = "primary",
       solidHeader = TRUE,
       collapsible = TRUE,
@@ -11,19 +18,36 @@ programmingEffortUI <- function(id) {
       width = 12,
       fluidRow(uiOutput(ns("valueBoxes"))),
       tabsetPanel(
-        tabPanel("Due Soon",div(style="margin-top:20px;",DTOutput(ns("dueSoon")))),
-        tabPanel("Past Due", div(style="margin-top:20px;",DTOutput(ns("pastDue")))) ,
+        id = ns("effortTabs"),
+        type = "tabs",
         tabPanel(
-          "Programmer Workload Table",
+          tagList(icon("clock"), "Due Soon"),
+          div(style="margin-top:20px;",DTOutput(ns("dueSoon")))
+        ),
+        tabPanel(
+          tagList(icon("calendar-times"), "Past Due"),
+          div(style="margin-top:20px;",DTOutput(ns("pastDue")))
+        ),
+        tabPanel(
+          tagList(icon("users"), "Programmer Workload"),
           fluidRow(
             column(width = 5, div(style="margin-top:20px;",gt_output(ns("summaryTable1")))),
             column(width = 1, div(style="margin-top:20px;",HTML("&nbsp;"))),
             column(width = 5, div(style="margin-top:20px;",gt_output(ns("summaryTable2"))))
           )
         ),
-        tabPanel("Task Summary Graph", div(style="margin-top:20px;",plotlyOutput(ns("taskPlot")))),
-        tabPanel("Status Pie Chart", div(style="margin-top:20px;",plotlyOutput(ns("statusPieChart")))),
-        tabPanel("Status Priority Chart", div(style="margin-top:20px;",plotlyOutput(ns("statusPriorityChart"))))
+        tabPanel(
+          tagList(icon("tasks"), "Task Summary"),
+          div(style="margin-top:20px;",plotlyOutput(ns("taskPlot")))
+        ),
+        tabPanel(
+          tagList(icon("chart-pie"), "Status Distribution"),
+          div(style="margin-top:20px;",plotlyOutput(ns("statusPieChart")))
+        ),
+        tabPanel(
+          tagList(icon("chart-bar"), "Status by Priority"),
+          div(style="margin-top:20px;",plotlyOutput(ns("statusPriorityChart")))
+        )
       )
     )
   )
