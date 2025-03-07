@@ -293,71 +293,32 @@ reportCRUDServer <- function(id, pool, tables_data) {
       }
 
       tryCatch({
-        # Get or create titles
-        titles_data <- lapply(input$titles, function(title_text) {
-          existing <- tables_data$titles() %>%
-            filter(title_text == title_text)
-          
-          if (nrow(existing) == 0) {
-            # Insert new title
-            new_id <- dbGetQuery(
-              pool,
-              "INSERT INTO titles (title_text, updated_at) VALUES (?, CURRENT_TIMESTAMP) RETURNING id",
-              params = list(title_text)
-            )$id
-            return(list(id = new_id, text = title_text))
-          } else {
-            return(list(id = existing$id[1], text = title_text))
-          }
-        })
-        
-        # Get or create footnotes
-        footnotes_data <- if (!is.null(input$footnotes)) {
-          lapply(input$footnotes, function(footnote_text) {
-            existing <- tables_data$footnotes() %>%
-              filter(footnote_text == footnote_text)
-            
-            if (nrow(existing) == 0) {
-              # Insert new footnote
-              new_id <- dbGetQuery(
-                pool,
-                "INSERT INTO footnotes (footnote_text, updated_at) VALUES (?, CURRENT_TIMESTAMP) RETURNING id",
-                params = list(footnote_text)
-              )$id
-              return(list(id = new_id, text = footnote_text))
-            } else {
-              return(list(id = existing$id[1], text = footnote_text))
-            }
-          })
-        }
-        
-        # Get or create population
-        population_data <- tables_data$populations() %>%
-          filter(population_text == input$populations)
-        
-        if (nrow(population_data) == 0) {
-          # Insert new population
-          population_id <- dbGetQuery(
-            pool,
-            "INSERT INTO populations (population_text, updated_at) VALUES (?, CURRENT_TIMESTAMP) RETURNING id",
-            params = list(input$populations)
-          )$id
-        } else {
-          population_id <- population_data$id[1]
-        }
-        
-        # Get other IDs from reactive tables
+        # Get IDs from reactive tables
         category_id <- tables_data$categories() %>%
           filter(category_name == input$category_name) %>%
           pull(id)
         
         sub_category_id <- tables_data$sub_categories() %>%
-          filter(sub_category_name == input$sub_category_name) %>%
-          inner_join(tables_data$categories() %>% 
-                    filter(category_name == input$category_name), 
-                    by = c("category_id" = "id")) %>%
+          filter(
+            sub_category_name == input$sub_category_name,
+            category_id == category_id
+          ) %>%
           pull(id)
-
+        
+        population_id <- tables_data$populations() %>%
+          filter(population_text == input$populations) %>%
+          pull(id)
+        
+        # For titles and footnotes
+        if (!is.null(input$titles)) {
+          titles_data <- tables_data$titles() %>%
+            filter(title_text %in% input$titles)
+        }
+        
+        if (!is.null(input$footnotes)) {
+          footnotes_data <- tables_data$footnotes() %>%
+            filter(footnote_text %in% input$footnotes)
+        }
         
         poolWithTransaction(pool, function(conn) {
           # Insert main report
@@ -382,23 +343,27 @@ reportCRUDServer <- function(id, pool, tables_data) {
           report_id <- dbGetQuery(conn, "SELECT last_insert_rowid()")
           
           # Insert report titles
-          for (title in titles_data) {
-            sequence <- match(title$text, sapply(titles_data, function(x) x$text))
-            dbExecute(
-              conn,
-              "INSERT INTO report_titles (report_id, title_id, sequence) VALUES (?, ?, ?)",
-              params = list(report_id[[1, 1]], title$id, sequence)
-            )
+          if (!is.null(input$titles)) {
+            for (title_text in input$titles) {
+              sequence <- match(title_text, input$titles)
+              title_id <- titles_data$id[titles_data$title_text == title_text]
+              dbExecute(
+                conn,
+                "INSERT INTO report_titles (report_id, title_id, sequence) VALUES (?, ?, ?)",
+                params = list(report_id[[1, 1]], title_id, sequence)
+              )
+            }
           }
           
           # Insert footnotes
-          if (!is.null(footnotes_data)) {
-            for (footnote in footnotes_data) {
-              sequence <- match(footnote$text, sapply(footnotes_data, function(x) x$text))
+          if (!is.null(input$footnotes)) {
+            for (footnote_text in input$footnotes) {
+              sequence <- match(footnote_text, input$footnotes)
+              footnote_id <- footnotes_data$id[footnotes_data$footnote_text == footnote_text]
               dbExecute(
                 conn,
                 "INSERT INTO report_footnotes (report_id, footnote_id, sequence) VALUES (?, ?, ?)",
-                params = list(report_id[[1, 1]], footnote$id, sequence)
+                params = list(report_id[[1, 1]], footnote_id, sequence)
               )
             }
           }
@@ -419,7 +384,6 @@ reportCRUDServer <- function(id, pool, tables_data) {
           text = paste("Error adding report:", e$message),
           position = "top-end"
         )
-        removeModal()
       })
     })    
 
@@ -584,70 +548,31 @@ reportCRUDServer <- function(id, pool, tables_data) {
         selected_row <- input$table_rows_selected
         report_id <- data()[selected_row, "id"]
         
-        # Get or create titles
-        titles_data <- lapply(input$titles, function(title_text) {
-          existing <- tables_data$titles() %>%
-            filter(title_text == title_text)
-          
-          if (nrow(existing) == 0) {
-            # Insert new title
-            new_id <- dbGetQuery(
-              pool,
-              "INSERT INTO titles (title_text, updated_at) VALUES (?, CURRENT_TIMESTAMP) RETURNING id",
-              params = list(title_text)
-            )$id
-            return(list(id = new_id, text = title_text))
-          } else {
-            return(list(id = existing$id[1], text = title_text))
-          }
-        })
-        
-        # Get or create footnotes
-        footnotes_data <- if (!is.null(input$footnotes)) {
-          lapply(input$footnotes, function(footnote_text) {
-            existing <- tables_data$footnotes() %>%
-              filter(footnote_text == footnote_text)
-            
-            if (nrow(existing) == 0) {
-              # Insert new footnote
-              new_id <- dbGetQuery(
-                pool,
-                "INSERT INTO footnotes (footnote_text, updated_at) VALUES (?, CURRENT_TIMESTAMP) RETURNING id",
-                params = list(footnote_text)
-              )$id
-              return(list(id = new_id, text = footnote_text))
-            } else {
-              return(list(id = existing$id[1], text = footnote_text))
-            }
-          })
-        }
-        
-        # Get or create population
-        population_data <- tables_data$populations() %>%
-          filter(population_text == input$populations)
-        
-        if (nrow(population_data) == 0) {
-          # Insert new population
-          population_id <- dbGetQuery(
-            pool,
-            "INSERT INTO populations (population_text, updated_at) VALUES (?, CURRENT_TIMESTAMP) RETURNING id",
-            params = list(input$populations)
-          )$id
-        } else {
-          population_id <- population_data$id[1]
-        }
-        
-        # Get other IDs from reactive tables
+        # Get IDs from reactive tables
         category_id <- tables_data$categories() %>%
           filter(category_name == input$category_name) %>%
           pull(id)
         
         sub_category_id <- tables_data$sub_categories() %>%
           filter(sub_category_name == input$sub_category_name) %>%
-          inner_join(tables_data$categories() %>% 
-                    filter(category_name == input$category_name), 
-                    by = c("category_id" = "id")) %>%
-          pull(id) 
+          inner_join(tables_data$categories() %>% filter(category_name == input$category_name) , by = c("category_id" = "id")) %>%
+          pull(id)
+        
+        population_id <- tables_data$populations() %>%
+          filter(population_text == input$populations) %>%
+          pull(id)
+        
+        # For titles and footnotes
+        if (!is.null(input$titles)) {
+          titles_data <- tables_data$titles() %>%
+            filter(title_text %in% input$titles)
+        }
+        
+        if (!is.null(input$footnotes)) {
+          footnotes_data <- tables_data$footnotes() %>%
+            filter(footnote_text %in% input$footnotes)
+        }
+      
 
         poolWithTransaction(pool, function(conn) {
           # Update main report
@@ -671,26 +596,30 @@ reportCRUDServer <- function(id, pool, tables_data) {
           dbExecute(conn, "DELETE FROM report_titles WHERE report_id = ?", 
                    params = list(report_id))
           
-          for (title in titles_data) {
-            sequence <- match(title$text, sapply(titles_data, function(x) x$text))
-            dbExecute(
-              conn,
-              "INSERT INTO report_titles (report_id, title_id, sequence) VALUES (?, ?, ?)",
-              params = list(report_id, title$id, sequence)
-            )
+          if (!is.null(input$titles)) {
+            for (title_text in input$titles) {
+              sequence <- match(title_text, input$titles)
+              title_id <- titles_data$id[titles_data$title_text == title_text]
+              dbExecute(
+                conn,
+                "INSERT INTO report_titles (report_id, title_id, sequence) VALUES (?, ?, ?)",
+                params = list(report_id, title_id, sequence)
+              )
+            }
           }
           
           # Update footnotes
           dbExecute(conn, "DELETE FROM report_footnotes WHERE report_id = ?", 
                    params = list(report_id))
           
-          if (!is.null(footnotes_data)) {
-            for (footnote in footnotes_data) {
-              sequence <- match(footnote$text, sapply(footnotes_data, function(x) x$text))
+          if (!is.null(input$footnotes)) {
+            for (footnote_text in input$footnotes) {
+              sequence <- match(footnote_text, input$footnotes)
+              footnote_id <- footnotes_data$id[footnotes_data$footnote_text == footnote_text]
               dbExecute(
                 conn,
                 "INSERT INTO report_footnotes (report_id, footnote_id, sequence) VALUES (?, ?, ?)",
-                params = list(report_id, footnote$id, sequence)
+                params = list(report_id, footnote_id, sequence)
               )
             }
           }
@@ -711,7 +640,6 @@ reportCRUDServer <- function(id, pool, tables_data) {
           text = paste("Error updating report:", e$message),
           position = "top-end"
         )
-        removeModal()
       })
     })
 
@@ -792,7 +720,6 @@ reportCRUDServer <- function(id, pool, tables_data) {
           text = paste("Error deleting report:", e$message),
           position = "top-end"
         )
-        removeModal()
       })
     })
 
