@@ -3,13 +3,13 @@ library(dplyr)
 library(pool)
 library(DBI)
 
-source("R/createTables.R")
+source("R/mod_create_tables.r")
 
 # Function to process categories
 db_insert_categories <- function(pool, df, drop = FALSE) {
   if (drop) {
     dbExecute(pool, "DROP TABLE IF EXISTS categories")
-    createTables(pool)
+    mod_create_tables(pool)
     unique_categories <- unique(df$category)
     categories_df <- data.frame(
       category_name = unique_categories
@@ -24,7 +24,7 @@ db_insert_categories <- function(pool, df, drop = FALSE) {
 db_insert_subcategories <- function(pool, categories, drop = FALSE) {
   if (drop) {
     dbExecute(pool, "DROP TABLE IF EXISTS sub_categories")
-    createTables(pool)
+    mod_create_tables(pool)
     subcategories <- data.frame(
       category_id = categories$category_id,
       sub_category_name = "General",
@@ -40,7 +40,7 @@ db_insert_subcategories <- function(pool, categories, drop = FALSE) {
 db_insert_populations <- function(pool, df, drop = FALSE) {
   if (drop) {
     dbExecute(pool, "DROP TABLE IF EXISTS populations")
-    createTables(pool)
+    mod_create_tables(pool)
     unique_populations <- unique(df$population)
     populations_df <- data.frame(
       population_text = unique_populations
@@ -56,7 +56,7 @@ db_insert_populations <- function(pool, df, drop = FALSE) {
 db_insert_titles <- function(pool, df, drop = FALSE) {
   if (drop) {
     dbExecute(pool, "DROP TABLE IF EXISTS titles")
-    createTables(pool)
+    mod_create_tables(pool)
     unique_titles <- unique(df$title)
     titles_df <- data.frame(
       title_text = unique_titles
@@ -71,7 +71,7 @@ db_insert_titles <- function(pool, df, drop = FALSE) {
 db_insert_footnotes <- function(pool, df, drop = FALSE) {
   if (drop) {
     dbExecute(pool, "DROP TABLE IF EXISTS footnotes")
-    createTables(pool)
+    mod_create_tables(pool)
     unique_footnotes <- unique(df$footnote)
     footnotes_df <- data.frame(
       footnote_text = unique_footnotes
@@ -87,7 +87,7 @@ db_insert_footnotes <- function(pool, df, drop = FALSE) {
 db_insert_reports <- function(pool, df_with_ids, drop = FALSE) {
   if (drop) {
     dbExecute(pool, "DROP TABLE IF EXISTS reports")
-    createTables(pool)
+    mod_create_tables(pool)
     reports_data <- df_with_ids %>%
       transmute(
         report_type = type,
@@ -109,7 +109,7 @@ db_insert_reports <- function(pool, df_with_ids, drop = FALSE) {
 db_insert_reports_titles <- function(pool, df, drop = FALSE) {
   if (drop) {
     dbExecute(pool, "DROP TABLE IF EXISTS report_titles")
-    createTables(pool)
+    mod_create_tables(pool)
     reports_titles <- df %>%
       transmute(
         report_id = report_id,
@@ -126,7 +126,7 @@ db_insert_reports_titles <- function(pool, df, drop = FALSE) {
 db_insert_reports_footnotes <- function(pool, df, drop = FALSE) {
   if (drop) {
     dbExecute(pool, "DROP TABLE IF EXISTS report_footnotes")
-    createTables(pool)
+    mod_create_tables(pool)
     reports_footnotes <- df %>%
       transmute(
         report_id = report_id,
@@ -156,7 +156,7 @@ import_excel_data <- function(file_path, toc) {
 db_insert_reporting_efforts <- function(pool, reporting_efforts, drop = FALSE) {
   if (drop) {
     dbExecute(pool, "DROP TABLE IF EXISTS reporting_efforts")
-    createTables(pool)
+    mod_create_tables(pool)
     dbWriteTable(pool, "reporting_efforts", reporting_efforts, append = TRUE)
   }
   
@@ -173,7 +173,7 @@ db_insert_reporting_effort_reports <- function(pool, reporting_effort_reports, d
                 report_id = report_id, 
                 report_type = report_type)
     
-    createTables(pool)
+    mod_create_tables(pool)
     dbWriteTable(pool, "reporting_effort_reports", re, append = TRUE)
     
   }
@@ -189,7 +189,7 @@ db_insert_report_programming_tracker <- function(pool, reporting_effort_reports,
       transmute(reporting_effort_id = reporting_effort_id,
                 report_id = report_id, 
                 report_type = report_type)
-    createTables(pool)
+    mod_create_tables(pool)
     dbWriteTable(pool, "report_programming_tracker", re, append = TRUE)
   }
   
@@ -214,7 +214,7 @@ import_sdtm_data <- function(file_path, toc) {
 db_insert_sdtm_data <- function(pool, sdtm, drop = FALSE) {
   if (drop) {
     dbExecute(pool, "DROP TABLE IF EXISTS datasets")
-    createTables(pool)
+    mod_create_tables(pool)
     dbWriteTable(pool, "datasets", sdtm, append = TRUE)
   }
   
@@ -236,7 +236,7 @@ main <- function() {
     select(-c(unnamed1, unamed2))
   
   # Ensure tables exist
-  createTables(pool)
+  mod_create_tables(pool)
   
   # Process and insert data into respective tables
   categories <- db_insert_categories(pool, df, drop = TRUE)

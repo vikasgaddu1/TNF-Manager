@@ -1,4 +1,4 @@
-source("R/createTables.R")
+source("R/mod_create_tables.r")
 # export database to xlsx
 export_database <- function(pool) {
   library(openxlsx)
@@ -58,7 +58,7 @@ export_database <- function(pool) {
 
 # import database from xlsx
 import_database <- function(pool) {
-  createTables(pool)
+  mod_create_tables(pool)
   library(readxl)
   df <- read_excel("data/excel_export/categories.xlsx")
   dbWriteTable(pool, "categories", df, append = TRUE)

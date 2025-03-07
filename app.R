@@ -30,8 +30,8 @@ dbPoolCon <- dbPool(RSQLite::SQLite(), dbname = "data/database.sqlite", create =
 # Get list of tables in the database
 tables <- dbListTables(dbPoolCon)
 
-# Call createTables.R to create the tables and triggers
-createTables(dbPoolCon)
+# Call mod_create_tables.r to create the tables and triggers
+mod_create_tables(dbPoolCon)
 
 
 ui <- dashboardPage(
@@ -92,7 +92,7 @@ ui <- dashboardPage(
     tabItems(
       tabItem(
         tabName = "home",
-        landingPageUI("landing")
+        mod_landing_page_ui("landing")
       ),
       tabItem(
         tabName = "crud_menu",
@@ -100,29 +100,44 @@ ui <- dashboardPage(
           tabBox(
             id = "crud_tabs",
             width = 12,
-            tabPanel("Categories", icon = icon("folder"), genericCRUDUI("categories", "Categories")),
-            tabPanel("Sub Categories", icon = icon("folder-tree"), genericCRUDUI("sub_categories", "Sub-Categories")),
-            tabPanel("Titles", icon = icon("heading"), genericCRUDUI("titles", "Titles")),
-            tabPanel("Footnotes", icon = icon("note-sticky"), genericCRUDUI("footnotes", "Footnotes")),
-            tabPanel("Populations", icon = icon("users"), genericCRUDUI("populations", "Populations")),
-            tabPanel("Users", icon = icon("user"), genericCRUDUI("users", "Users")),
-            tabPanel("Datasets", icon = icon("database"), genericCRUDUI("datasets", "Datasets")),
-            tabPanel("Reports", icon = icon("file-lines"), genericCRUDUI("reports", "Reports")),
-            tabPanel("Reporting Effort", icon = icon("chart-line"), genericCRUDUI("reporting_effort", "Reporting Effort")),
-            tabPanel("Upload", icon = icon("upload"), uploadUI("upload")),
-            tabPanel("View DB", icon = icon("table"), tableSelectorUI("tableSelector"))
+            tabPanel("Categories", icon = icon("folder"), mod_generic_crud_ui("categories", "Categories")),
+            tabPanel("Sub Categories", icon = icon("folder-tree"), mod_generic_crud_ui("sub_categories", "Sub-Categories")),
+            tabPanel("Titles", icon = icon("heading"), mod_generic_crud_ui("titles", "Titles")),
+            tabPanel("Footnotes", icon = icon("note-sticky"), mod_generic_crud_ui("footnotes", "Footnotes")),
+            tabPanel("Populations", icon = icon("users"), mod_generic_crud_ui("populations", "Populations")),
+            tabPanel("Users", icon = icon("user"), mod_generic_crud_ui("users", "Users")),
+            tabPanel("Datasets", icon = icon("database"), mod_generic_crud_ui("datasets", "Datasets")),
+            tabPanel("Reports", icon = icon("file-lines"), mod_generic_crud_ui("reports", "Reports")),
+            tabPanel("Reporting Effort", icon = icon("chart-line"), mod_generic_crud_ui("reporting_effort", "Reporting Effort")),
+            tabPanel("Upload", icon = icon("upload"), mod_upload_ui("upload")),
+            tabPanel("View DB", icon = icon("table"), mod_table_selector_ui("tableSelector"))
           )
         )
       ),
       tabItem(
         "re_reports",
-        associateTask_RE_UI("re_reports", "Associate Task to Reporting Effort")
+        mod_associate_task_re_ui("re_reports", "Associate Task to Reporting Effort")
       ),
-      tabItem("tracker", programmingTrackerUI("tracker")),
-      tabItem("milestone", milestoneUI("milestone")),
-      tabItem("decision_log", decisionLogUI("decision_log")),
-      tabItem("search", searchUI("search")),
-      tabItem("faq", FAQModuleUI("faq"))
+      tabItem(
+        tabName = "tracker",
+        mod_programming_tracker_ui("tracker")
+      ),
+      tabItem(
+        tabName = "milestone",
+        mod_milestone_ui("milestone")
+      ),
+      tabItem(
+        tabName = "decision_log",
+        mod_decision_log_ui("decision_log")
+      ),
+      tabItem(
+        tabName = "search",
+        mod_search_ui("search")
+      ),
+      tabItem(
+        tabName = "faq",
+        mod_faq_ui("faq")
+      )
       # Add more tabItems for other tables
     )
   ),
@@ -177,25 +192,25 @@ server <- function(input, output, session) {
 
   
   # Use reactive values in modules
-  singleColumnCRUDServer("categories", dbPoolCon, "categories", "category_name", tables_data = tables_data)
-  subCategoriesCRUDServer("sub_categories", dbPoolCon, tabs_input = reactive(input$crud_tabs), tables_data = tables_data)
-  singleColumnCRUDServer("titles", dbPoolCon, "titles", "title_text", tables_data = tables_data)
-  singleColumnCRUDServer("footnotes", dbPoolCon, "footnotes", "footnote_text", tables_data = tables_data)
-  singleColumnCRUDServer("populations", dbPoolCon, "populations", "population_text", tables_data = tables_data)
-  datasetsCRUDServer("datasets", dbPoolCon, tables_data = tables_data)
-  reportCRUDServer("reports", dbPoolCon, tables_data = tables_data)
-  reportingEffortsServer("reporting_effort", dbPoolCon, tables_data = tables_data)
-  usersServer("users", dbPoolCon, tables_data = tables_data)
-  associateTask_RE_Server("re_reports", dbPoolCon, tables_data = tables_data)
-  uploadServer("upload", upload_directory = "data/excel_import")
-  search_data <- programmingTrackerServer("tracker", dbPoolCon, tables_data = tables_data)
-  tracker_data <- tableSelectorServer("tableSelector", tables_data = tables_data, table_names = tables)
-    # Landing page
-  landingPageServer("landing", dbPoolCon, tracker_data,tables_data, session)
-  taskSummaryServer("taskSummary", tracker_data, current_user)
-  searchServer("search", search_data[[1]], search_data[[2]], search_data[[3]])
-  milestoneServer("milestone", dbPoolCon, tables_data = tables_data)
-  decisionLogServer("decision_log", dbPoolCon, tables_data = tables_data)
+  mod_single_column_crud_server("categories", dbPoolCon, "categories", "category_name", tables_data = tables_data)
+  mod_sub_categories_crud_server("sub_categories", dbPoolCon, tabs_input = reactive(input$crud_tabs), tables_data = tables_data)
+  mod_single_column_crud_server("titles", dbPoolCon, "titles", "title_text", tables_data = tables_data)
+  mod_single_column_crud_server("footnotes", dbPoolCon, "footnotes", "footnote_text", tables_data = tables_data)
+  mod_single_column_crud_server("populations", dbPoolCon, "populations", "population_text", tables_data = tables_data)
+  mod_datasets_crud_server("datasets", dbPoolCon, tables_data = tables_data)
+  mod_report_crud_server("reports", dbPoolCon, tables_data = tables_data)
+  mod_reporting_efforts_server("reporting_effort", dbPoolCon, tables_data = tables_data)
+  mod_users_server("users", dbPoolCon, tables_data = tables_data)
+  mod_associate_task_re_server("re_reports", dbPoolCon, tables_data = tables_data)
+  mod_upload_server("upload", upload_directory = "data/excel_import")
+  search_data <- mod_programming_tracker_server("tracker", dbPoolCon, tables_data = tables_data)
+  tracker_data <- mod_table_selector_server("tableSelector", tables_data = tables_data, table_names = tables)
+  # Landing page
+  mod_landing_page_server("landing", dbPoolCon, tracker_data, tables_data, session)
+  mod_task_summary_server("taskSummary", tracker_data, current_user)
+  mod_search_server("search", search_data[[1]], search_data[[2]], search_data[[3]])
+  mod_milestone_server("milestone", dbPoolCon, tables_data = tables_data)
+  mod_decision_log_server("decision_log", dbPoolCon, tables_data = tables_data)
   
   # Set the initial tab to Home
   observe({
